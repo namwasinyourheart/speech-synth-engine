@@ -1,0 +1,5 @@
+1	Xin chào, đây là MiniMax voice cloning
+2	Tôi rất vui được làm việc với bạn
+3	Cảm ơn bạn đã sử dụng dịch vụ của chúng tôi
+4	Chúc bạn một ngày tốt lành
+5	Hẹn gặp lại bạn lần sau

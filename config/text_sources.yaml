@@ -1,0 +1,83 @@
+# ============================================================
+# Text Sources Configuration
+# Cấu hình nguồn dữ liệu text cho TTS generation
+# ============================================================
+
+# Định nghĩa các nguồn text khả dụng
+text_sources:
+  # Dữ liệu tỉnh thành Việt Nam
+  vietnam_provinces:
+    type: "province"
+    file_path: "/media/nampv1/hdd/data/vn_commune_district_province/raw/text/province_list_with_prefix.txt"
+    description: "Danh sách 63 tỉnh thành Việt Nam"
+    encoding: "utf-8"
+    expected_count: 63
+
+  # Dữ liệu quận/huyện (ví dụ)
+  vietnam_districts:
+    type: "district"
+    file_path: "/media/nampv1/hdd/data/vn_commune_district_province/raw/text/district_list.csv"
+    description: "Danh sách quận/huyện Việt Nam"
+    encoding: "utf-8"
+    text_column: "district"
+    expected_count: 700  # khoảng
+
+  # Dữ liệu xã/phường (ví dụ)
+  vietnam_communes:
+    type: "commune"
+    file_path: "/media/nampv1/hdd/data/vn_commune_district_province/raw/text/commune_list.csv"
+    description: "Danh sách xã/phường Việt Nam"
+    encoding: "utf-8"
+    text_column: "commune"
+    expected_count: 11000  # khoảng
+
+  # Custom text files
+  custom_addresses:
+    type: "custom"
+    file_path: "/path/to/custom/addresses.txt"
+    description: "Địa chỉ tùy chỉnh để generate"
+    encoding: "utf-8"
+
+  # Từ ASR dataset
+  asr_transcripts:
+    type: "custom"
+    file_path: "/media/nampv1/hdd/data/ASR-VLSP2020-VINAI-100H/processed/transcripts.jsonl"
+    description: "Transcripts từ ASR dataset"
+    encoding: "utf-8"
+    text_column: "transcript"
+    filters:
+      duration_min: 1.0
+      duration_max: 10.0
+
+# Cấu hình xử lý text
+text_processing:
+  # Loại bỏ các ký tự đặc biệt
+  remove_special_chars: true
+  special_chars_pattern: "[<>\"/\\\\|?*]"
+
+  # Chuẩn hóa khoảng trắng
+  normalize_whitespace: true
+
+  # Loại bỏ text quá ngắn hoặc quá dài
+  min_length: 3
+  max_length: 200
+
+  # Loại bỏ duplicate
+  remove_duplicates: true
+
+  # Case sensitivity
+  case_sensitive: false
+
+# Cấu hình validation
+validation:
+  # Validate source files tồn tại
+  check_file_exists: true
+
+  # Validate encoding
+  check_encoding: true
+
+  # Validate số lượng records
+  check_record_count: true
+
+  # Validate format của từng record
+  check_record_format: true

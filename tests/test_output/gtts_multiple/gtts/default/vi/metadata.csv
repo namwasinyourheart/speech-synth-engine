@@ -1,0 +1,4 @@
+utt_id,text,audio_path,provider,model,voice,sample_rate,lang,duration,gen_date
+001,"Xin chào, đây là test đầu tiên","gtts/default/vi/wav/001_Xin_chào,_đây_là_test_đầu_tiên.wav",gtts,default,vi,22050,vi,2.50,2025-10-18 08:33:06
+002,Đây là test thứ hai với enhanced system,gtts/default/vi/wav/002_Đây_là_test_thứ_hai_với_enhanced_system.wav,gtts,default,vi,22050,vi,3.25,2025-10-18 08:33:08
+003,Test cuối cùng để kiểm tra hoạt động,gtts/default/vi/wav/003_Test_cuối_cùng_để_kiểm_tra_hoạt_động.wav,gtts,default,vi,22050,vi,3.00,2025-10-18 08:33:09

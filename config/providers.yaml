@@ -1,0 +1,87 @@
+# ============================================================
+# Providers Configuration
+# Cấu hình cho các TTS providers được hỗ trợ
+# ============================================================
+
+# Cấu hình các providers khả dụng
+providers:
+  # GTTS Provider - miễn phí, đơn giản
+  gtts:
+    class: "speech_synth_engine.providers.gtts_provider.GTTSProvider"
+    sample_rate: 22050
+    language: "vi"
+    chars_per_second: 12
+    min_duration: 0.5
+    max_duration: 10.0
+
+  # Gemini Provider - AI nâng cao
+  gemini:
+    class: "speech_synth_engine.providers.gemini_provider.GeminiTTSProvider"
+    api_key: "${GEMINI_API_KEY}"  # Sử dụng biến môi trường
+    sample_rate: 22050
+    model: "gemini-1.5-flash"
+    voice: "Kore"
+    language: "vi"
+    chars_per_second: 15
+    min_duration: 0.3
+    max_duration: 8.0
+
+  # VNPost Provider - chuyên biệt cho tiếng Việt
+  vnpost:
+    class: "speech_synth_engine.providers.vnpost_provider.VNPostTTSProvider"
+    api_key: "${VNPOST_API_KEY}"
+    sample_rate: 22050
+    voice: "hn-female-01"
+    language: "vi"
+    chars_per_second: 14
+    min_duration: 0.4
+    max_duration: 9.0
+
+  # MiniMax Provider - voice cloning via Selenium automation
+  minimax_selenium:
+    class: "speech_synth_engine.providers.minimax_selenium_provider.MiniMaxSeleniumProvider"
+    base_url: "https://www.minimax.io/audio/voices-cloning"
+    google_email: "${MINIMAX_GOOGLE_EMAIL}"
+    google_password: "${MINIMAX_GOOGLE_PASSWORD}"
+    headless: false
+    sample_rate: 22050
+    language: "Vietnamese"
+    timeout: 30
+    download_timeout: 120
+    max_wait_time: 300
+    batch_processing: true
+    max_batch_size: 10
+    batch_delay: 2
+    chars_per_second: 12
+    min_duration: 0.5
+    max_duration: 15.0
+
+  # Azure TTS Provider (ví dụ mở rộng)
+  azure:
+    class: "speech_synth_engine.providers.azure_provider.AzureTTSProvider"
+    api_key: "${AZURE_API_KEY}"
+    region: "southeastasia"
+    sample_rate: 16000
+    models:
+      neural:
+        voices:
+          - "vi-VN-HoaiMyNeural"
+          - "vi-VN-NamMinhNeural"
+    language: "vi"
+    chars_per_second: 13
+    min_duration: 0.5
+    max_duration: 10.0
+
+# Cấu hình mặc định cho generation
+generation_defaults:
+  batch_size: 10
+  delay_between_requests: 0.5
+  continue_on_error: true
+  max_retries: 3
+  retry_delay: 1.0
+
+# Cấu hình logging
+logging:
+  level: "INFO"
+  file: "logs/tts_generation.log"
+  format: "%(asctime)s | %(name)s | %(levelname)s | %(message)s"

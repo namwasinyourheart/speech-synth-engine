@@ -1,0 +1,34 @@
+2025-10-18 08:33:06,281 | ProviderFactory | INFO | ✅ Registered 3 built-in providers
+2025-10-18 08:33:06,281 | ProviderFactory | INFO | ✅ Created provider: gtts
+2025-10-18 08:33:06,281 | DatasetGenerator | INFO | ✅ DatasetGenerator initialized with 1 providers
+2025-10-18 08:33:06,281 | DatasetGenerator | INFO | 🚀 Starting generation with 3 texts and 1 provider configs
+2025-10-18 08:33:06,283 | DirectoryManager | INFO | ✅ Đã tạo metadata file: tests/test_output/gtts_multiple/gtts/default/vi/metadata.csv
+2025-10-18 08:33:06,283 | DirectoryManager | INFO | ✅ Directory structure created:
+2025-10-18 08:33:06,283 | DirectoryManager | INFO |    Provider: gtts
+2025-10-18 08:33:06,283 | DirectoryManager | INFO |    Model: default
+2025-10-18 08:33:06,283 | DirectoryManager | INFO |    Voice: vi
+2025-10-18 08:33:06,283 | DirectoryManager | INFO |    WAV dir: tests/test_output/gtts_multiple/gtts/default/vi/wav
+2025-10-18 08:33:06,283 | DirectoryManager | INFO |    Metadata: tests/test_output/gtts_multiple/gtts/default/vi/metadata.csv
+2025-10-18 08:33:06,737 | TTSProvider.gtts | INFO | ✅ GTTS synthesis successful: tests/test_output/gtts_multiple/gtts/default/vi/wav/001_Xin_chào,_đây_là_test_đầu_tiên.wav (122.0KB, 2.50s)
+2025-10-18 08:33:07,737 | DirectoryManager | INFO | ⚠️ Metadata file đã tồn tại: tests/test_output/gtts_multiple/gtts/default/vi/metadata.csv
+2025-10-18 08:33:07,738 | DirectoryManager | INFO | ✅ Directory structure created:
+2025-10-18 08:33:07,738 | DirectoryManager | INFO |    Provider: gtts
+2025-10-18 08:33:07,738 | DirectoryManager | INFO |    Model: default
+2025-10-18 08:33:07,738 | DirectoryManager | INFO |    Voice: vi
+2025-10-18 08:33:07,738 | DirectoryManager | INFO |    WAV dir: tests/test_output/gtts_multiple/gtts/default/vi/wav
+2025-10-18 08:33:07,738 | DirectoryManager | INFO |    Metadata: tests/test_output/gtts_multiple/gtts/default/vi/metadata.csv
+2025-10-18 08:33:08,154 | TTSProvider.gtts | INFO | ✅ GTTS synthesis successful: tests/test_output/gtts_multiple/gtts/default/vi/wav/002_Đây_là_test_thứ_hai_với_enhanced_system.wav (136.5KB, 3.25s)
+2025-10-18 08:33:09,155 | DirectoryManager | INFO | ⚠️ Metadata file đã tồn tại: tests/test_output/gtts_multiple/gtts/default/vi/metadata.csv
+2025-10-18 08:33:09,155 | DirectoryManager | INFO | ✅ Directory structure created:
+2025-10-18 08:33:09,155 | DirectoryManager | INFO |    Provider: gtts
+2025-10-18 08:33:09,155 | DirectoryManager | INFO |    Model: default
+2025-10-18 08:33:09,155 | DirectoryManager | INFO |    Voice: vi
+2025-10-18 08:33:09,155 | DirectoryManager | INFO |    WAV dir: tests/test_output/gtts_multiple/gtts/default/vi/wav
+2025-10-18 08:33:09,155 | DirectoryManager | INFO |    Metadata: tests/test_output/gtts_multiple/gtts/default/vi/metadata.csv
+2025-10-18 08:33:09,543 | TTSProvider.gtts | INFO | ✅ GTTS synthesis successful: tests/test_output/gtts_multiple/gtts/default/vi/wav/003_Test_cuối_cùng_để_kiểm_tra_hoạt_động.wav (111.7KB, 3.00s)
+2025-10-18 08:33:10,544 | DatasetGenerator | INFO | 📊 Generation Summary:
+2025-10-18 08:33:10,544 | DatasetGenerator | INFO |    Total texts: 3
+2025-10-18 08:33:10,544 | DatasetGenerator | INFO |    ✅ Successful generations: 3
+2025-10-18 08:33:10,544 | DatasetGenerator | INFO |    ❌ Failed generations: 0
+2025-10-18 08:33:10,544 | DatasetGenerator | INFO |    ⏱️ Total duration: 4.26s
+2025-10-18 08:33:10,544 | DatasetGenerator | INFO |    📁 Output dir: tests/test_output/gtts_multiple

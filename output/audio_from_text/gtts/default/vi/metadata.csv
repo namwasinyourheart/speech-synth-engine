@@ -1,0 +1,21 @@
+utt_id,text,audio_path,provider,model,voice,sample_rate,lang,duration,gen_date
+001,Hồ Chí Minh,gtts/default/vi/wav/001_Hồ_Chí_Minh.wav,gtts,default,vi,22050,vi,0.92,2025-10-18 09:12:59
+002,Hà Nội,gtts/default/vi/wav/002_Hà_Nội.wav,gtts,default,vi,22050,vi,0.50,2025-10-18 09:13:00
+003,Đà Nẵng,gtts/default/vi/wav/003_Đà_Nẵng.wav,gtts,default,vi,22050,vi,0.58,2025-10-18 09:13:01
+004,Cần Thơ,gtts/default/vi/wav/004_Cần_Thơ.wav,gtts,default,vi,22050,vi,0.58,2025-10-18 09:13:02
+005,Hải Phòng,gtts/default/vi/wav/005_Hải_Phòng.wav,gtts,default,vi,22050,vi,0.75,2025-10-18 09:13:03
+006,Quận 1,gtts/default/vi/wav/006_Quận_1.wav,gtts,default,vi,22050,vi,0.50,2025-10-18 09:13:03
+007,Quận Bình Thạnh,gtts/default/vi/wav/007_Quận_Bình_Thạnh.wav,gtts,default,vi,22050,vi,1.25,2025-10-18 09:13:04
+008,Quận Ba Đình,gtts/default/vi/wav/008_Quận_Ba_Đình.wav,gtts,default,vi,22050,vi,1.00,2025-10-18 09:13:05
+009,Quận Tân Bình,gtts/default/vi/wav/009_Quận_Tân_Bình.wav,gtts,default,vi,22050,vi,1.08,2025-10-18 09:13:06
+010,Quận Thủ Đức,gtts/default/vi/wav/010_Quận_Thủ_Đức.wav,gtts,default,vi,22050,vi,1.00,2025-10-18 09:13:07
+011,Hồ Chí Minh,gtts/default/vi/wav/011_Hồ_Chí_Minh.wav,gtts,default,vi,22050,vi,0.92,2025-10-18 09:14:10
+012,Hà Nội,gtts/default/vi/wav/012_Hà_Nội.wav,gtts,default,vi,22050,vi,0.50,2025-10-18 09:14:11
+013,Đà Nẵng,gtts/default/vi/wav/013_Đà_Nẵng.wav,gtts,default,vi,22050,vi,0.58,2025-10-18 09:14:12
+014,Cần Thơ,gtts/default/vi/wav/014_Cần_Thơ.wav,gtts,default,vi,22050,vi,0.58,2025-10-18 09:14:13
+015,Hải Phòng,gtts/default/vi/wav/015_Hải_Phòng.wav,gtts,default,vi,22050,vi,0.75,2025-10-18 09:14:14
+016,Quận 1,gtts/default/vi/wav/016_Quận_1.wav,gtts,default,vi,22050,vi,0.50,2025-10-18 09:14:15
+017,Quận Bình Thạnh,gtts/default/vi/wav/017_Quận_Bình_Thạnh.wav,gtts,default,vi,22050,vi,1.25,2025-10-18 09:14:16
+018,Quận Ba Đình,gtts/default/vi/wav/018_Quận_Ba_Đình.wav,gtts,default,vi,22050,vi,1.00,2025-10-18 09:14:17
+019,Quận Tân Bình,gtts/default/vi/wav/019_Quận_Tân_Bình.wav,gtts,default,vi,22050,vi,1.08,2025-10-18 09:14:18
+020,Quận Thủ Đức,gtts/default/vi/wav/020_Quận_Thủ_Đức.wav,gtts,default,vi,22050,vi,1.00,2025-10-18 09:14:19

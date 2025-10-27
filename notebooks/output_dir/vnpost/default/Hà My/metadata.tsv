@@ -1,0 +1,4 @@
+utt_id,text_id,text,audio_path,provider,model,voice,sample_rate,lang,duration,gen_date
+001	1	Hồ Chí Minh	vnpost/default/Hà My/wav/1_Hồ_Chí_Minh.wav	vnpost	default	Hà My	22050	vi	0.92	2025-10-18 16:36:47
+002	2	Hà Nội	vnpost/default/Hà My/wav/2_Hà_Nội.wav	vnpost	default	Hà My	22050	vi	0.50	2025-10-18 16:36:54
+003	3	Đà Nẵng	vnpost/default/Hà My/wav/3_Đà_Nẵng.wav	vnpost	default	Hà My	22050	vi	0.58	2025-10-18 16:37:01
