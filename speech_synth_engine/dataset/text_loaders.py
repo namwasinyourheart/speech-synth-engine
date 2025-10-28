@@ -14,34 +14,61 @@ import logging
 class TextLoader(ABC):
     """Abstract base class for text loaders"""
 
-    def __init__(self, source_path: Path):
-        self.source_path = Path(source_path)
+    def __init__(self):
         self.logger = logging.getLogger(f"TextLoader.{self.__class__.__name__}")
 
     @abstractmethod
-    def load(self) -> List[Tuple[str, str]]:
-        """Load text with IDs from source"""
+    def load(self, source_path: Union[str, Path]) -> List[Tuple[str, str]]:
+        """
+        Load text with IDs from source
+        
+        Args:
+            source_path: Path to the source file or directory
+            
+        Returns:
+            List of tuples containing (id, text) pairs
+        """
         pass
 
-    def validate_source(self) -> bool:
-        """Validate source data"""
-        return self.source_path.exists()
+    def validate_source(self, source_path: Union[str, Path]) -> bool:
+        """
+        Validate source data
+        
+        Args:
+            source_path: Path to the source file or directory to validate
+            
+        Returns:
+            bool: True if source is valid, False otherwise
+        """
+        return Path(source_path).exists()
 
 class TextFileLoader(TextLoader):
     """Generic loader for text files - loads all lines including comments"""
 
-    def __init__(self, source_path: Path, encoding: str = "utf-8"):
-        super().__init__(source_path)
+    def __init__(self, encoding: str = "utf-8"):
+        super().__init__()
         self.encoding = encoding
 
-    def load(self) -> List[Tuple[str, str]]:
-        """Load text lines with IDs from file, format: id\\ttext or just text"""
-        if not self.validate_source():
-            raise FileNotFoundError(f"File not found: {self.source_path}")
+    def load(self, source_path: Union[str, Path]) -> List[Tuple[str, str]]:
+        """
+        Load text lines with IDs from file
+        
+        Args:
+            source_path: Path to the text file to load
+            
+        Returns:
+            List of tuples containing (id, text) pairs
+            
+        Raises:
+            FileNotFoundError: If the source file doesn't exist
+        """
+        source_path = Path(source_path)
+        if not self.validate_source(source_path):
+            raise FileNotFoundError(f"File not found: {source_path}")
 
         text_items = []
         try:
-            with open(self.source_path, 'r', encoding=self.encoding) as f:
+            with open(source_path, 'r', encoding=self.encoding) as f:
                 for line_num, line in enumerate(f, 1):
                     text = line.rstrip('\n\r')  # Remove only line endings, keep spaces
 
@@ -63,7 +90,7 @@ class TextFileLoader(TextLoader):
                         # No tab found, auto-generate ID starting from 1
                         text_items.append((str(line_num), text.strip()))
 
-            self.logger.info(f"✅ Loaded {len(text_items)} text items from {self.source_path}")
+            self.logger.info(f"✅ Loaded {len(text_items)} text items from {source_path}")
             return text_items
 
         except Exception as e:

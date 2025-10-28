@@ -1,1 +1,7 @@
 .env
+
+__pycache__
+
+speech-synth-engine/notebooks/test_output
+
+*copy.py

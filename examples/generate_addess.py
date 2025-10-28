@@ -127,8 +127,8 @@ def main():
     try:
         # Load text items
         logger.info("📖 Loading text items...")
-        loader = TextFileLoader(text_path)
-        text_items = loader.load()
+        loader = TextFileLoader()
+        text_items = loader.load(text_path)
 
         if not text_items:
             logger.error("❌ No text items found in file")

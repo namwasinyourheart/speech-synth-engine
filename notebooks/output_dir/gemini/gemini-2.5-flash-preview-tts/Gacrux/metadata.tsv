@@ -1,3 +1,0 @@
-utt_id,text_id,text,audio_path,provider,model,voice,sample_rate,lang,duration,gen_date
-001	1	Hồ Chí Minh	gemini/gemini-2.5-flash-preview-tts/Gacrux/wav/1_Hồ_Chí_Minh.wav	gemini	gemini-2.5-flash-preview-tts	Gacrux	24000	vi	0.92	2025-10-18 16:41:27
-002	2	Hà Nội	gemini/gemini-2.5-flash-preview-tts/Gacrux/wav/2_Hà_Nội.wav	gemini	gemini-2.5-flash-preview-tts	Gacrux	24000	vi	0.50	2025-10-18 16:41:30

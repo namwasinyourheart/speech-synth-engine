@@ -1,5 +1,0 @@
-utt_id,text_id,text,audio_path,provider,model,voice,sample_rate,lang,duration,gen_date
-001	1	Hồ Chí Minh	gemini/gemini-2.5-flash-preview-tts/Charon/wav/1_Hồ_Chí_Minh.wav	gemini	gemini-2.5-flash-preview-tts	Charon	24000	vi	0.92	2025-10-18 16:43:25
-002	1	Hồ Chí Minh	gemini/gemini-2.5-flash-preview-tts/Charon/wav/1_Hồ_Chí_Minh.wav	gemini	gemini-2.5-flash-preview-tts	Charon	24000	vi	0.92	2025-10-18 16:44:10
-003	2	Hà Nội	gemini/gemini-2.5-flash-preview-tts/Charon/wav/2_Hà_Nội.wav	gemini	gemini-2.5-flash-preview-tts	Charon	24000	vi	0.50	2025-10-18 16:44:27
-004	3	Đà Nẵng	gemini/gemini-2.5-flash-preview-tts/Charon/wav/3_Đà_Nẵng.wav	gemini	gemini-2.5-flash-preview-tts	Charon	24000	vi	0.58	2025-10-18 16:44:32

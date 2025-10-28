@@ -1,4 +1,0 @@
-utt_id,text_id,text,audio_path,provider,model,voice,sample_rate,lang,duration,gen_date
-001	1	Hồ Chí Minh	gtts/default/vi/wav/1_Hồ_Chí_Minh.wav	gtts	default	vi	22050	vi	0.92	2025-10-18 16:54:19
-002	2	Hà Nội	gtts/default/vi/wav/2_Hà_Nội.wav	gtts	default	vi	22050	vi	0.50	2025-10-18 16:54:23
-003	3	Đà Nẵng	gtts/default/vi/wav/3_Đà_Nẵng.wav	gtts	default	vi	22050	vi	0.58	2025-10-18 16:54:26

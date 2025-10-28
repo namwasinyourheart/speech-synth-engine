@@ -38,17 +38,20 @@ class ProviderFactory:
             from ..gtts_provider import GTTSProvider
             from ..gemini_provider import GeminiTTSProvider
             from ..vnpost_provider import VnPostTTSProvider
+            from ..minimax_selenium_provider import MiniMaxSeleniumProvider
 
             self._provider_classes.update({
                 'gtts': GTTSProvider,        
                 'gemini': GeminiTTSProvider, 
-                'vnpost': VnPostTTSProvider  
+                'vnpost': VnPostTTSProvider,
+                'minimax_selenium': MiniMaxSeleniumProvider
             })
 
             self.logger.info(f"✅ Registered {len(self._provider_classes)} built-in providers")
 
         except ImportError as e:
             self.logger.warning(f"⚠️ Cannot import some providers: {e}")
+            self.logger.exception("Detailed error:")
 
     def register_provider_class(self, name: str, provider_class: Type[TTSProvider]):
         """Register additional provider class"""

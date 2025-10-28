@@ -49,6 +49,10 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
 
             # Store main window handle
             self.main_window = self.driver.current_window_handle
+            
+            # Check and handle CAPTCHA if present
+            if not self._handle_captcha():
+                self.logger.warning("⚠️ CAPTCHA handling failed or was not completed")
 
             # 1. Click "Sign In" button
             signin_btn = self.wait_for_clickable(
@@ -135,6 +139,74 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
             self.take_screenshot("minimax_auth_error.png")
             self.close_extra_windows(self.main_window)
             return False
+
+    def _wait_for_captcha_to_resolve(self, timeout: int = 120) -> bool:
+        """
+        Wait for CAPTCHA to resolve itself automatically.
+        
+        Args:
+            timeout: Maximum time to wait in seconds
+            
+        Returns:
+            bool: True if CAPTCHA was resolved or not present, False if timeout
+        """
+        self.logger.info("⏳ Waiting for CAPTCHA to resolve automatically...")
+        start_time = time.time()
+        
+        def is_captcha_visible():
+            try:
+                # Check common CAPTCHA elements
+                captcha_elements = self.driver.find_elements(
+                    By.CSS_SELECTOR,
+                    "#TktRY1, div[role='alert'], .cb-c, iframe[title*='challenge'], " \
+                    "iframe[src*='turnstile'], iframe[src*='cloudflare']"
+                )
+                return any(element.is_displayed() for element in captcha_elements)
+            except:
+                return False
+        
+        # Initial check
+        if not is_captcha_visible():
+            self.logger.info("✅ No CAPTCHA found, continuing...")
+            return True
+            
+        # Wait for CAPTCHA to disappear
+        while time.time() - start_time < timeout:
+            if not is_captcha_visible():
+                self.logger.info("✅ CAPTCHA resolved automatically")
+                return True
+                
+            # Take periodic screenshots for debugging
+            if int(time.time() - start_time) % 10 == 0:  # Every 10 seconds
+                self.take_screenshot(f"captcha_wait_{int(time.time())}.png")
+                self.logger.info(f"⏳ Still waiting for CAPTCHA to resolve... "
+                              f"({int(time.time() - start_time)}s elapsed)")
+            
+            time.sleep(1)
+        
+        self.logger.warning(f"⚠️ CAPTCHA did not resolve within {timeout} seconds")
+        self.take_screenshot("captcha_timeout.png")
+        return False
+
+    def _handle_captcha(self, max_attempts: int = 5) -> bool:
+        """
+        Handle CAPTCHA by waiting for it to resolve automatically.
+        
+        Args:
+            max_attempts: Not used, kept for backward compatibility
+            
+        Returns:
+            bool: Always returns True to continue execution
+        """
+        try:
+            # Wait for CAPTCHA to resolve with a 2-minute timeout
+            self._wait_for_captcha_to_resolve(timeout=120)
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error in CAPTCHA handling: {e}")
+            self.take_screenshot("captcha_error.png")
+            return True  # Continue anyway to avoid blocking the flow
 
     def _upload_reference_audio(self, reference_audio: Path) -> bool:
         """
@@ -309,11 +381,11 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
                 self.safe_click(checkbox)
 
             # 3. Click Generate/Regenerate button
-            self.logger.info("⏳ Waiting for Generate button to appear...")
+            self.logger.info("⏳ Waiting for Generate or Regenerate button to appear...")
             generate_button = WebDriverWait(self.driver, 20).until(
                 EC.presence_of_element_located((
                     By.XPATH,
-                    "//*[@id='voices-cloning-form']//button[.//span[normalize-space()='Generate']]"
+                    "//*[@id='voices-cloning-form']//button[.//span[normalize-space()='Generate'] or .//span[normalize-space()='Regenerate']]"
                 ))
             )
 
@@ -376,7 +448,7 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
             # If no reference audio provided, check if one is already uploaded
             if not reference_audio:
                 self.logger.info("ℹ️ No reference audio provided, checking if one is already uploaded...")
-                duration_xpath = "//*[@id='voices-cloning-form']//div[contains(@class,'flex-1')]//span[contains(text(), \"''\")]"
+                duration_xpath = "//*[@id='voices-cloning-form']//div[contains(@class,'flex-1')]//span[contains(text(), "''")]"
                 uploaded_elements = self.driver.find_elements(By.XPATH, duration_xpath)
 
                 if not uploaded_elements:
@@ -384,21 +456,26 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
                     return False, None
 
                 self.logger.info("✅ Using previously uploaded reference audio")
+            else:
+                # Upload reference audio if provided (for cloning)
+                reference_audio = Path(reference_audio)
+                if reference_audio.exists():
+                    if not self._upload_reference_audio(reference_audio):
+                        return False, None
+                    self.logger.info(f"✅ Uploaded reference audio: {reference_audio}")
 
-            # Upload reference audio if provided (for cloning)
-            if reference_audio and reference_audio.exists():
-                if not self._upload_reference_audio(reference_audio):
+            # Select language (only once per session)
+            if not hasattr(self, '_language_selected'):
+                if not self._select_language(self.language):
                     return False, None
+                self._language_selected = True
 
-            # Select language
-            if not self._select_language(self.language):
-                return False, None
-
-            # Generate voice from text
+            # Generate voice from text using the existing method
             return self._generate_voice_from_text(text)
 
         except Exception as e:
             self.logger.error(f"❌ Error in generate_voice: {e}")
+            self.take_screenshot("minimax_generate_voice_error.png")
             return False, None
 
     def synthesize_with_metadata(self, text: str, voice: str, output_file: Path) -> Dict[str, Any]:
@@ -521,20 +598,21 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
         }
 
         try:
-            # Setup driver and authenticate
-            if not self.driver:
-                if not self.setup_driver():
+            # Setup driver and authenticate (only once)
+            if not hasattr(self, '_initialized') or not self._initialized:
+                if not self.driver and not self.setup_driver():
                     result['error'] = "Failed to setup driver"
                     return result
 
-            if not self.navigate_to_base_url():
-                result['error'] = "Failed to navigate to MiniMax"
-                return result
+                if not self.navigate_to_base_url():
+                    result['error'] = "Failed to navigate to MiniMax"
+                    return result
 
-            if not self.is_authenticated:
-                if not self.authenticate():
+                if not self.is_authenticated and not self.authenticate():
                     result['error'] = "Authentication failed"
                     return result
+                
+                self._initialized = True
 
             # Generate voice with reference audio
             success, audio_url = self.generate_voice(text, reference_audio)
@@ -557,9 +635,6 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
             result['error'] = str(e)
             self.logger.error(f"❌ MiniMax voice cloning error: {e}")
             self.take_screenshot("minimax_cloning_error.png")
-
-        # finally:
-        #     self.cleanup()
 
         return result
 
