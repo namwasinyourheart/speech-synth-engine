@@ -1,0 +1,4 @@
+selenium==4.37.0
+soundfile
+numpy
+undetected-chromedriver==3.5.5

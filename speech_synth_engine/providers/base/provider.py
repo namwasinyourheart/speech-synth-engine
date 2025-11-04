@@ -19,7 +19,7 @@ class TTSProvider(ABC):
     def __init__(self, name: str, config: Dict[str, Any] = None):
         self.name = name
         self.config = config or {}
-        self.sample_rate = self.config.get('sample_rate', 22050)
+        self.sample_rate = self.config.get('sample_rate', None)
         self.language = self.config.get('language', 'vi')
         self.supported_voices = self._get_supported_voices()
         self.logger = logging.getLogger(f"TTSProvider.{self.name}")

@@ -30,6 +30,9 @@ class DirectoryManager:
             'metadata': 'metadata.tsv'  # Changed from .csv to .tsv
         }
 
+    def get_voice_dir(self, provider: str, model: str, voice: str) -> Path:
+        return self.base_dir / provider / model / voice
+
     def create_output_directory(self, provider: str, model: str, voice: str) -> Tuple[Path, Path]:
         """
         Create directory structure for a specific provider/model/voice.
@@ -49,23 +52,36 @@ class DirectoryManager:
             voice_dir = model_dir / voice
             wav_dir = voice_dir / "wav"
 
-            # Create necessary directories
-            wav_dir.mkdir(parents=True, exist_ok=True)
+            # Check if output directory exists
+            if not wav_dir.exists():
+                # Create necessary directories
+                wav_dir.mkdir(parents=True)
 
-            # Metadata file path
-            metadata_file = voice_dir / "metadata.tsv"
+                # Metadata file path
+                metadata_file = voice_dir / "metadata.tsv"
 
-            # Initialize metadata file with header if not exists
-            self.initialize_metadata_file(metadata_file)
+                # Initialize metadata file with header if not exists
+                self.initialize_metadata_file(metadata_file)
 
-            self.logger.info(f"✅ Directory structure created:")
-            self.logger.info(f"   Provider: {provider}")
-            self.logger.info(f"   Model: {model}")
-            self.logger.info(f"   Voice: {voice}")
-            self.logger.info(f"   WAV dir: {wav_dir}")
-            self.logger.info(f"   Metadata: {metadata_file}")
+                self.logger.info(f"✅ Directory structure created:")
+                self.logger.info(f"   Provider: {provider}")
+                self.logger.info(f"   Model: {model}")
+                self.logger.info(f"   Voice: {voice}")
+                self.logger.info(f"   WAV dir: {wav_dir}")
+                self.logger.info(f"   Metadata: {metadata_file}")
 
-            return wav_dir, metadata_file
+                return voice_dir, wav_dir, metadata_file
+            else:
+                self.logger.info(f"✅ Output directory have been already created: {wav_dir}")
+                self.logger.info(f"   Provider: {provider}")
+                self.logger.info(f"   Model: {model}")
+                self.logger.info(f"   Voice: {voice}")
+                self.logger.info(f"   WAV dir: {wav_dir}")
+
+                metadata_file = wav_dir.parent / "metadata.tsv"
+                self.logger.info(f"   Metadata: {metadata_file}")
+
+                return voice_dir, wav_dir, metadata_file
 
         except Exception as e:
             self.logger.error(f"❌ Lỗi tạo cấu trúc thư mục: {e}")
@@ -81,7 +97,7 @@ class DirectoryManager:
             voice: Voice name (cloned_voice, etc.)
 
         Returns:
-            Tuple containing (wav_dir, metadata_file)
+            Tuple containing (voice_dir, wav_dir, metadata_file)
         """
         try:
             # Create directory paths for clone structure
@@ -107,7 +123,7 @@ class DirectoryManager:
             self.logger.info(f"   WAV dir: {wav_dir}")
             self.logger.info(f"   Metadata: {metadata_file}")
 
-            return wav_dir, metadata_file
+            return voice_dir, wav_dir, metadata_file
 
         except Exception as e:
             self.logger.error(f"❌ Lỗi tạo clone cấu trúc thư mục: {e}")
@@ -126,8 +142,8 @@ class DirectoryManager:
         """
         if columns is None:
             columns = [
-                "utt_id", "text_id", "text", "audio_path",  # Added text_id column
-                "provider", "model", "voice", "tts_type",  # Added tts_type
+                "utt_id", "text_id", "text", "audio_path",  
+                "provider", "model", "voice", "tts_type", 
                 "sample_rate", "lang", "duration", "gen_date"
             ]
 
@@ -159,9 +175,8 @@ class DirectoryManager:
         """
         columns = [
             "utt_id", "text_id", "text", "audio_path",
-            "provider", "reference_audio", "tts_type",
-            "sample_rate", "lang", "duration", "gen_date",
-            "audio_url", "clone_id"
+            "provider", "model", "voice", "tts_type",
+            "sample_rate", "lang", "duration", "gen_date"
         ]
 
         try:
@@ -180,26 +195,35 @@ class DirectoryManager:
             self.logger.error(f"❌ Lỗi tạo clone metadata file: {e}")
             return False
 
-    def add_metadata_entry_clone(self, metadata_file: Path, text: str, audio_path: Path,
-                               provider: str, reference_audio: str, tts_type: str,
-                               sample_rate: int = 22050, duration: float = None, text_id: str = None,
-                               audio_url: str = None, clone_id: str = None) -> bool:
+    def add_metadata_entry_clone(
+        self, 
+        metadata_file: Path, 
+        text: str, 
+        audio_path: Path,
+        provider: str, 
+        model: str,
+        voice: str,
+        tts_type: str="clone",
+        sample_rate: int = None, 
+        duration: float = None, 
+        text_id: str = None,
+        lang: str = "vi",
+    ) -> bool:
         """
         Add a metadata entry for clone operations to the TSV file.
 
         Args:
             metadata_file: Path to metadata file
-            text: Cloned text content
+            text: Synthesized text content
             audio_path: Path to audio file (relative to base_dir)
             provider: Provider name
-            reference_audio: Reference audio filename
+            model: Model name
+            voice: Voice name
             tts_type: Operation type ("clone")
-            sample_rate: Audio sample rate
+            sample_rate: Audio sample rate (if available)
             duration: Actual duration (if available)
             text_id: ID from input text file
-            audio_url: Audio URL from provider
-            clone_id: Clone session ID
-
+            lang: Language code (default "vi")
         Returns:
             True if entry is added successfully
         """
@@ -223,14 +247,15 @@ class DirectoryManager:
                 text,
                 str(audio_path),
                 provider,
-                reference_audio,
+                model,
+                voice,
                 tts_type,
                 str(sample_rate),
-                "vi",  # language mặc định
+                lang,
                 f"{duration:.2f}",
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                audio_url or "",
-                clone_id or ""
+                # audio_url or "",
+                # clone_id or ""
             ]
 
             # Write to TSV file
@@ -354,10 +379,10 @@ class DirectoryManager:
         try:
             # Check directory structure based on operation type
             if tts_type == "clone":
-                # Clone structure: provider/reference_audio/voice/
+                # Clone structure: provider/model/voice/
                 provider_dir = self.base_dir / provider
-                reference_dir = provider_dir / model_or_reference
-                voice_dir = reference_dir / voice
+                model_dir = provider_dir / model_or_reference
+                voice_dir = model_dir / voice
                 wav_dir = voice_dir / "wav"
                 metadata_file = voice_dir / "metadata.tsv"
             else:  # synthesize
@@ -544,7 +569,7 @@ class DirectoryManager:
         try:
             # Determine directory structure based on operation type
             if tts_type == "clone":
-                # Clone structure: provider/reference_audio/voice/
+                # Clone structure: provider/model/voice/
                 wav_dir = self.base_dir / provider / model_or_reference / voice / "wav"
                 metadata_file = self.base_dir / provider / model_or_reference / voice / "metadata.tsv"
             else:  # synthesize

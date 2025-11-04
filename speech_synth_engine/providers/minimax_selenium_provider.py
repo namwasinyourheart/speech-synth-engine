@@ -377,8 +377,22 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
 
             # 2. Ensure checkbox is ticked
             checkbox = self.driver.find_element(By.XPATH, "//*[@id='voices-cloning-form']//input[@type='checkbox']")
-            if not checkbox.is_selected():
-                self.safe_click(checkbox)
+            # if not checkbox.is_selected():
+            #     self.safe_click(checkbox)
+
+            
+            for attempt in range(1, 3):
+                try:
+                    if not checkbox.is_selected():
+                        self.safe_click(checkbox)
+                    break
+                except Exception as e:
+                    self.logger.info(f"[Attempt {attempt}] Warning in checkbox selection: {e}. Retrying...")
+                    time.sleep(0.5)
+            else:
+                self.logger.warning("⚠️ Failed to select checkbox after multiple attempts")
+            
+            
 
             # 3. Click Generate/Regenerate button
             self.logger.info("⏳ Waiting for Generate or Regenerate button to appear...")
@@ -393,35 +407,90 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
             self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", generate_button)
             time.sleep(0.5)  # đợi nhẹ cho hiệu ứng cuộn
 
-            # Chờ khi có thể click
-            WebDriverWait(self.driver, 10).until(
-                EC.element_to_be_clickable(generate_button)
+            # Retry click logic: click and wait in short windows; if no audio appears, click again
+            generate_xpath = (
+                "//*[@id='voices-cloning-form']//button"
+                "[.//span[normalize-space()='Generate'] or .//span[normalize-space()='Regenerate']]"
             )
 
-            # Click vào nút "Generate"
-            generate_button.click()
-            self.logger.info("✅ Clicked 'Generate' button.")
-            
+            max_retries = int(self.config.get('generate_retries', 3))
+            per_attempt_wait = int(self.config.get('generate_retry_wait', 20))  # seconds
+            overall_deadline = time.time() + int(self.max_wait_time)
 
-            # generate_xpath = (
-            #     "//*[@id='voices-cloning-form']//button"
-            #     "[.//span[normalize-space()='Generate'] or .//span[normalize-space()='Regenerate']]"
-            # )
+            audio_element = None
 
-            # generate_button = self.wait_for_clickable(By.XPATH, generate_xpath, timeout=self.max_wait_time)
-            # if not generate_button or not self.safe_click(generate_button):
-            #     self.logger.error("❌ Generate button not found or not clickable")
-            #     return False, None
+            for attempt in range(1, max_retries + 1):
+                # Re-find the button each attempt in case DOM changed
+                try:
+                    generate_button = WebDriverWait(self.driver, 10).until(
+                        EC.element_to_be_clickable((By.XPATH, generate_xpath))
+                    )
+                except Exception:
+                    self.logger.warning("⚠️ Generate button not clickable; trying to locate again by presence")
+                    generate_button = WebDriverWait(self.driver, 10).until(
+                        EC.presence_of_element_located((By.XPATH, generate_xpath))
+                    )
 
-            # 4. Wait for audio to appear
-            audio_element = self.wait_for_element(
-                By.XPATH,
-                "//h2[contains(text(), 'Generated Voice Results')]/following::audio[1]",
-                timeout=self.max_wait_time
-            )
+                # Scroll into view before clicking
+                try:
+                    self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", generate_button)
+                except Exception:
+                    pass
+                time.sleep(0.3)
 
+                # Click the button (safe click with fallback)
+                clicked = self.safe_click(generate_button)
+                if not clicked:
+                    try:
+                        self.driver.execute_script("arguments[0].click();", generate_button)
+                        clicked = True
+                    except Exception as click_e:
+                        self.logger.warning(f"⚠️ JS click failed on attempt {attempt}: {click_e}")
+
+                if clicked:
+                    self.logger.info(f"✅ Clicked 'Generate' button (attempt {attempt}/{max_retries}).")
+                else:
+                    self.logger.warning(f"⚠️ Could not click 'Generate' button (attempt {attempt}/{max_retries}).")
+
+                # Wait for audio to appear within per-attempt window but not exceeding overall max_wait_time
+                attempt_deadline = min(overall_deadline, time.time() + per_attempt_wait)
+                last_button_state = "Generating"
+                
+                while time.time() < attempt_deadline:
+                    try:
+                        # Check for audio element
+                        found = self.driver.find_elements(By.XPATH, "//h2[contains(text(), 'Generated Voice Results')]/following::audio[1]")
+                        if found:
+                            audio_element = found[0]
+                            break
+                    except Exception:
+                        pass
+
+                    # Optional: detect obvious error to break early
+                    try:
+                        error_elements = self.driver.find_elements(By.XPATH, "//div[contains(@class,'error') or contains(@class,'ant-message-error')]")
+                        if error_elements:
+                            self.logger.error(f"❌ Error message detected after clicking Generate: {error_elements[0].text}")
+                            break
+                    except Exception:
+                        pass
+
+                    time.sleep(1.5)
+
+                if audio_element:
+                    break
+
+                # If overall time exceeded, stop retrying
+                if time.time() >= overall_deadline:
+                    self.logger.error("❌ Overall generation wait time exceeded while retrying clicks")
+                    break
+
+                # Otherwise, prepare to retry
+                self.logger.info("↻ No audio yet; retrying click on 'Generate'...")
+
+            # After retries, ensure we have the audio element
             if not audio_element:
-                self.logger.error("❌ Generated audio element not found")
+                self.logger.error("❌ Generated audio element not found after retries")
                 return False, None
 
             # 5. Extract audio URL
@@ -584,17 +653,17 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
         """
         result = {
             'success': False,
-            'text': text,
-            'voice': 'cloned_voice',
-            'output_file': str(output_file),
-            'provider': self.name,
-            'sample_rate': self.sample_rate,
-            'language': self.language,
-            'estimated_duration': self.estimate_duration(text),
+            # 'text': text,
+            # 'voice': 'cloned_voice',
+            # 'output_file': str(output_file),
+            # 'provider': self.name,
+            # 'sample_rate': self.sample_rate,
+            # 'language': self.language,
+            # 'estimated_duration': self.estimate_duration(text),
             'error': None,
-            'file_info': {},
-            'audio_url': None,
-            'reference_audio': str(reference_audio)
+            # 'file_info': {},
+            # 'audio_url': None,
+            # 'reference_audio': str(reference_audio)
         }
 
         try:
@@ -621,13 +690,13 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
                 result['error'] = "Voice generation failed"
                 return result
 
-            result['audio_url'] = audio_url
+            # result['audio_url'] = audio_url
 
             # Download audio
             if self.download_audio(audio_url, output_file):
                 result['success'] = True
-                result['file_info'] = self.get_file_info(output_file)
-                self.logger.info(f"✅ MiniMax voice cloning successful: {output_file}")
+                # result['file_info'] = self.get_file_info(output_file)
+                self.logger.info(f"✅ MiniMax voice cloning successful")
             else:
                 result['error'] = "Audio download failed"
 

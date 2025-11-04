@@ -7,6 +7,9 @@
 import os
 import time
 import logging
+import tempfile
+import shutil
+import subprocess
 from abc import abstractmethod
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
@@ -53,70 +56,107 @@ class SeleniumProvider(TTSProvider):
         # Session management
         self.is_authenticated = False
         self.main_window = None
+        self.profile_dir: Optional[str] = None  # unique Chrome profile per instance
 
     def setup_driver(self) -> bool:
         """
         Setup Chrome driver with appropriate options.
         Returns True if successful, False otherwise.
+        Only undetected_chromedriver is allowed for this provider.
         """
         try:
+            if not uc:
+                self.logger.error("❌ undetected_chromedriver is required but not installed")
+                return False
+
+            # Create an isolated temporary Chrome profile dir for this instance
+            # This avoids profile locking/conflicts when running multiple scripts concurrently
+            self.profile_dir = tempfile.mkdtemp(prefix="uc_profile_")
+
             options = Options()
 
             # Basic options
             if self.headless:
-                options.add_argument('--headless')
+                # Use new headless for Chrome 109+
+                options.add_argument('--headless=new')
 
-            # options.add_argument('--no-sandbox')
-            # options.add_argument('--disable-dev-shm-usage')
-            # options.add_argument('--disable-gpu')
-            # options.add_argument('--window-size=' + self.window_size)
-            options.add_argument('--guest')  # Launch in guest mode for privacy
+            # Stability and isolation
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
+            options.add_argument('--disable-gpu')
+            options.add_argument(f'--window-size={self.window_size}')
+            # options.add_argument(f'--user-data-dir={self.profile_dir}')
+            options.add_argument(f"--user-data-dir=/tmp/chrome_profile_{os.getpid()}")
+            options.add_argument('--no-first-run')
+            options.add_argument('--no-default-browser-check')
+            options.add_argument('--disable-popup-blocking')
+            options.add_argument('--disable-features=TranslateUI')
+            options.add_argument("--remote-debugging-port=" + str(9222 + os.getpid() % 1000))
 
-            # Anti-detection options (compatible with newer Chrome versions)
-            # options.add_argument('--disable-blink-features=AutomationControlled')
-            # options.add_argument('--disable-web-security')
-            # options.add_argument('--allow-running-insecure-content')
-            # options.add_argument('--disable-features=VizDisplayCompositor')
+            # Reduce automation fingerprinting
+            # options.add_experimental_option('excludeSwitches', ['enable-automation'])
+            # options.add_experimental_option('useAutomationExtension', False)
 
-            # Use undetected_chromedriver if available
-            if uc:
-                try:
-                    if self.driver_path:
-                        from selenium.webdriver.chrome.service import Service
-                        service = Service(executable_path=self.driver_path)
-                        self.driver = uc.Chrome(service=service, options=options, version_main=None)
-                    else:
-                        self.driver = uc.Chrome(options=options, version_main=None)
-                    self.logger.info("✅ Using undetected_chromedriver")
-                except Exception as e:
-                    self.logger.warning(f"⚠️ Undetected chromedriver failed: {e}, falling back to regular driver")
-                    # Fallback to regular Chrome driver
-                    if self.driver_path:
-                        from selenium.webdriver.chrome.service import Service
-                        service = Service(executable_path=self.driver_path)
-                        self.driver = webdriver.Chrome(service=service, options=options)
-                    else:
-                        self.driver = webdriver.Chrome(options=options)
-                    self.logger.info("✅ Using regular Chrome driver")
-            else:
-                # Fallback to regular Chrome driver
+            # Detect Chrome major version
+            try:
+                chrome_version = int(subprocess.check_output([
+                    "google-chrome", "--version"
+                ]).decode().split()[2].split(".")[0])
+            except Exception as e:
+                self.logger.warning(f"⚠️ Could not detect Chrome version: {e}. Proceeding without version_main")
+                chrome_version = None
+
+            # Launch undetected_chromedriver
+            try:
+                uc_kwargs = {
+                    'options': options,
+                    'use_subprocess': True,
+                }
+                if chrome_version is not None:
+                    uc_kwargs['version_main'] = chrome_version
+
                 if self.driver_path:
                     from selenium.webdriver.chrome.service import Service
                     service = Service(executable_path=self.driver_path)
-                    self.driver = webdriver.Chrome(service=service, options=options)
+                    self.driver = uc.Chrome(service=service, **uc_kwargs)
                 else:
-                    self.driver = webdriver.Chrome(options=options)
-                self.logger.info("✅ Using regular Chrome driver")
+                    self.driver = uc.Chrome(**uc_kwargs)
 
-            # Additional setup
-            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+                # Extra hardening to hide webdriver flag (uc normally handles this)
+                try:
+                    self.driver.execute_script(
+                        "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+                    )
+                except Exception:
+                    pass
 
-            return True
+                self.logger.info("✅ Using undetected_chromedriver with isolated profile")
+                return True
+            except Exception as e:
+                self.logger.error(f"❌ Failed to initialize undetected_chromedriver: {e}")
+                # Cleanup temp profile dir on failure
+                try:
+                    if self.profile_dir and os.path.isdir(self.profile_dir):
+                        shutil.rmtree(self.profile_dir, ignore_errors=True)
+                        self.profile_dir = None
+                except Exception:
+                    pass
+                return False
 
         except Exception as e:
             self.logger.error(f"❌ Failed to setup driver: {e}")
+            # Cleanup temp profile dir on failure
+            try:
+                if self.profile_dir and os.path.isdir(self.profile_dir):
+                    shutil.rmtree(self.profile_dir, ignore_errors=True)
+                    self.profile_dir = None
+            except Exception:
+                pass
             return False
 
+
+
+    
     def navigate_to_base_url(self) -> bool:
         """Navigate to the provider's base URL"""
         if not self.driver:
@@ -277,6 +317,13 @@ class SeleniumProvider(TTSProvider):
             finally:
                 self.driver = None
                 self.is_authenticated = False
+        # Remove temporary profile directory if created
+        try:
+            if self.profile_dir and os.path.isdir(self.profile_dir):
+                shutil.rmtree(self.profile_dir, ignore_errors=True)
+                self.profile_dir = None
+        except Exception as e:
+            self.logger.warning(f"⚠️ Failed to remove temp profile dir: {e}")
 
     def __enter__(self):
         """Context manager entry"""
