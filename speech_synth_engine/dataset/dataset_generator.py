@@ -527,7 +527,6 @@ class DatasetGenerator:
                 text=text,
                 provider=provider_name,
                 model=model,
-                # voice=voice,
                 audio_path=Path(),
                 metadata_path=Path(),
                 duration=0,
@@ -538,8 +537,8 @@ class DatasetGenerator:
             )
 
         try:
-            # Create output directory
-            voice_dir, wav_dir, metadata_file = self.directory_manager.create_output_directory(
+            # Create directory structure for cloning
+            voice_dir, wav_dir = self.directory_manager.create_provider_structure_clone(
                 provider_name, model, voice
             )
 
@@ -550,15 +549,14 @@ class DatasetGenerator:
 
             # Check if file already exists - skip generation if it does
             if audio_path.exists():
-                self.logger.info(f"⚠️ Audio file already exists: {audio_path}")
+                self.logger.info(f"⚠️ Audio file already exists, skipping: {audio_path}")
                 return CloneResult(
                     success=True,
                     text=text,
                     provider=provider_name,
                     model=model,
-                    # voice=voice,
                     audio_path=audio_path,
-                    metadata_path=metadata_file,
+                    metadata_path=voice_dir,  # Point to the directory
                     duration=0,
                     file_size=audio_path.stat().st_size,
                     reference_audio=reference_audio,
@@ -567,14 +565,13 @@ class DatasetGenerator:
 
             # Generate the audio using clone with reference_audio
             synth_result = provider.clone_with_metadata(text, reference_audio, audio_path)
-            print(f"-"*48)
 
             if synth_result['success']:
-                # Add to metadata
+                # Add metadata entry using the new method
                 self.directory_manager.add_metadata_entry_clone(
-                    metadata_file=metadata_file,
+                    voice_dir=voice_dir,
                     text=text,
-                    audio_path=audio_path.relative_to(self.directory_manager.base_dir),
+                    audio_path=audio_path,
                     provider=provider_name,
                     model=model,
                     voice=voice,
@@ -590,9 +587,8 @@ class DatasetGenerator:
                     text=text,
                     provider=provider_name,
                     model=model,
-                    # voice=voice,
                     audio_path=audio_path,
-                    metadata_path=metadata_file,
+                    metadata_path=voice_dir, # Point to the directory
                     duration=synth_result.get('estimated_duration', 0),
                     file_size=audio_path.stat().st_size if audio_path.exists() else 0,
                     reference_audio=reference_audio,
@@ -603,7 +599,7 @@ class DatasetGenerator:
                     text=text,
                     provider=provider_name,
                     audio_path=audio_path,
-                    metadata_path=metadata_file,
+                    metadata_path=voice_dir, # Point to the directory
                     duration=0,
                     model=model,
                     reference_audio=reference_audio,
