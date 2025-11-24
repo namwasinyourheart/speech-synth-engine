@@ -401,9 +401,13 @@ class DatasetGenerator:
                 error=f"Provider {provider_name} is not available"
             )
 
+        # Sanitize voice name - extract base voice name if it contains path separators
+        # For cases like 'vi/shards/shard_0', we want to extract 'vi' (the first part)
+        clean_voice = voice.split('/')[0] if '/' in voice else voice
+
         try:
             # Create directory structure for synthesis
-            voice_dir, wav_dir, metadata_file = self.directory_manager.create_output_directory(
+            voice_dir, wav_dir = self.directory_manager.create_output_directory(
                 provider_name, model, voice
             )
 
@@ -414,50 +418,37 @@ class DatasetGenerator:
 
             # Check if file already exists - skip generation if it does
             if audio_path.exists():
-                self.logger.info(f"⚠️ Audio file already exists: {audio_path}")
-                # Add to metadata
-                self.directory_manager.add_metadata_entry(
-                    metadata_file=metadata_file,
-                    text=text,
-                    audio_path=audio_path.relative_to(self.directory_manager.base_dir),
-                    provider=provider_name,
-                    model=model,
-                    voice=voice,
-                    tts_type="synthesize",
-                    sample_rate=provider.sample_rate,
-                    duration=0,  # Will be updated after synthesis
-                    text_id=text_id
-                )
-                
+                self.logger.info(f"⚠️ Audio file already exists, skipping: {audio_path}")
                 return SynthesisResult(
                     success=True,
                     text=text,
                     provider=provider_name,
                     model=model,
                     audio_path=audio_path,
-                    metadata_path=metadata_file,
+                    metadata_path=voice_dir,  # Point to the directory
                     duration=0,
                     file_size=audio_path.stat().st_size,
                     voice=voice,
                     skipped_duplicate=True
                 )
 
-            # Generate the audio
-            synth_result = provider.synthesize_with_metadata(text, voice, audio_path)
+            # Generate the audio using clean voice name
+            synth_result = provider.synthesize_with_metadata(text, clean_voice, audio_path)
 
             if synth_result['success']:
-                # Add to metadata
+                # Add metadata entry using the new method
                 self.directory_manager.add_metadata_entry(
-                    metadata_file=metadata_file,
+                    voice_dir=voice_dir,
                     text=text,
-                    audio_path=audio_path.relative_to(self.directory_manager.base_dir),
+                    audio_path=audio_path,
                     provider=provider_name,
                     model=model,
                     voice=voice,
                     tts_type="synthesize",
                     sample_rate=provider.sample_rate,
                     duration=synth_result.get('estimated_duration', 0),
-                    text_id=text_id
+                    text_id=text_id,
+                    lang="vi"
                 )
 
                 return SynthesisResult(
@@ -466,7 +457,7 @@ class DatasetGenerator:
                     provider=provider_name,
                     model=model,
                     audio_path=audio_path,
-                    metadata_path=metadata_file,
+                    metadata_path=voice_dir,  # Point to the directory
                     duration=synth_result.get('estimated_duration', 0),
                     file_size=audio_path.stat().st_size if audio_path.exists() else 0,
                     voice=voice
@@ -478,7 +469,7 @@ class DatasetGenerator:
                     provider=provider_name,
                     model=model,
                     audio_path=audio_path,
-                    metadata_path=metadata_file,
+                    metadata_path=voice_dir,  # Point to the directory
                     duration=0,
                     voice=voice,
                     error=synth_result.get('error', 'Unknown error during synthesis')

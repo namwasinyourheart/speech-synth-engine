@@ -43,7 +43,7 @@ class DirectoryManager:
             voice (str): Voice name (e.g., vi, vi-VN-HoaiMyNeural, etc.)
 
         Returns:
-            Tuple[Path, Path]: A tuple containing the path to the wav directory and the path to the metadata file.
+            Tuple[Path, Path]: A tuple containing (voice_dir, wav_dir).
         """
         try:
             # Create directory paths
@@ -52,36 +52,16 @@ class DirectoryManager:
             voice_dir = model_dir / voice
             wav_dir = voice_dir / "wav"
 
-            # Check if output directory exists
-            if not wav_dir.exists():
-                # Create necessary directories
-                wav_dir.mkdir(parents=True)
+            # Create necessary directories
+            wav_dir.mkdir(parents=True, exist_ok=True)
 
-                # Metadata file path
-                metadata_file = voice_dir / "metadata.tsv"
+            self.logger.info(f"✅ Directory structure created:")
+            self.logger.info(f"   Provider: {provider}")
+            self.logger.info(f"   Model: {model}")
+            self.logger.info(f"   Voice: {voice}")
+            self.logger.info(f"   WAV dir: {wav_dir}")
 
-                # Initialize metadata file with header if not exists
-                self.initialize_metadata_file(metadata_file)
-
-                self.logger.info(f"✅ Directory structure created:")
-                self.logger.info(f"   Provider: {provider}")
-                self.logger.info(f"   Model: {model}")
-                self.logger.info(f"   Voice: {voice}")
-                self.logger.info(f"   WAV dir: {wav_dir}")
-                self.logger.info(f"   Metadata: {metadata_file}")
-
-                return voice_dir, wav_dir, metadata_file
-            else:
-                self.logger.info(f"✅ Output directory have been already created: {wav_dir}")
-                self.logger.info(f"   Provider: {provider}")
-                self.logger.info(f"   Model: {model}")
-                self.logger.info(f"   Voice: {voice}")
-                self.logger.info(f"   WAV dir: {wav_dir}")
-
-                metadata_file = wav_dir.parent / "metadata.tsv"
-                self.logger.info(f"   Metadata: {metadata_file}")
-
-                return voice_dir, wav_dir, metadata_file
+            return voice_dir, wav_dir
 
         except Exception as e:
             self.logger.error(f"❌ Lỗi tạo cấu trúc thư mục: {e}")
@@ -121,39 +101,6 @@ class DirectoryManager:
             self.logger.error(f"❌ Lỗi tạo clone cấu trúc thư mục: {e}")
             raise
 
-    def initialize_metadata_file(self, metadata_file: Path, columns: List[str] = None) -> bool:
-        """
-        Initialize metadata CSV file with header.
-
-        Args:
-            metadata_file: Path to metadata file
-            columns: Custom columns list (default based on requirements)
-
-        Returns:
-            True if initialization is successful
-        """
-        if columns is None:
-            columns = [
-                "utt_id", "text_id", "text", "audio_path",  
-                "provider", "model", "voice", "tts_type", 
-                "sample_rate", "lang", "duration", "gen_date"
-            ]
-
-        try:
-            if metadata_file.exists():
-                self.logger.info(f"⚠️ Metadata file đã tồn tại: {metadata_file}")
-                return True
-
-            with open(metadata_file, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                writer.writerow(columns)
-
-            self.logger.info(f"✅ Đã tạo metadata file: {metadata_file}")
-            return True
-
-        except Exception as e:
-            self.logger.error(f"❌ Lỗi tạo metadata file: {e}")
-            return False
 
 
     def add_metadata_entry_clone(
@@ -248,62 +195,81 @@ class DirectoryManager:
             self.logger.error(f"❌ Error adding clone metadata: {e}")
             return False
 
-    def add_metadata_entry(self, metadata_file: Path, text: str, audio_path: Path,
+    def add_metadata_entry(self, voice_dir: Path, text: str, audio_path: Path,
                           provider: str, model: str, voice: str, tts_type: str,
-                          sample_rate: int = 22050, duration: float = None, text_id: str = None) -> bool:
+                          sample_rate: int = 22050, duration: float = None, text_id: str = None, lang: str = "vi") -> bool:
         """
-        Add a metadata entry to the TSV file.
+        Add a metadata entry for synthesis operations, splitting data into
+        metadata.json (for common info) and text_audio.tsv (for audio-specific info).
 
         Args:
-            metadata_file: Path to metadata file
-            text: Synthesized text content
-            audio_path: Path to audio file (relative to base_dir)
-            provider: Provider name
-            model: Model name
-            voice: Voice name
-            tts_type: Operation type ("synthesize")
-            sample_rate: Audio sample rate
-            duration: Actual duration (if available)
-            text_id: ID from input text file (optional, for new format)
+            voice_dir: The base directory for the voice data (e.g., .../provider/model/voice).
+            text: Synthesized text content.
+            audio_path: Path to the audio file.
+            provider: Provider name.
+            model: Model name.
+            voice: Voice name.
+            tts_type: Operation type ("synthesize").
+            sample_rate: Audio sample rate.
+            duration: Actual audio duration.
+            text_id: ID from the input text file.
+            lang: Language code.
 
         Returns:
-            True if entry is added successfully
+            True if the entry is added successfully, False otherwise.
         """
         try:
-            # Count current lines to create utt_id
-            current_count = 0
-            if metadata_file.exists():
-                with open(metadata_file, 'r', encoding='utf-8') as f:
-                    current_count = sum(1 for _ in f) - 1  # Trừ header
+            # Define paths for the new metadata files
+            metadata_json_path = voice_dir / "metadata.json"
+            text_audio_tsv_path = voice_dir / "text_audio.tsv"
 
-            utt_id = f"{current_count + 1:03d}"
+            # --- Handle metadata.json (common data) ---
+            if not metadata_json_path.exists():
+                common_metadata = {
+                    "provider": provider,
+                    "model": model,
+                    "voice": voice,
+                    "tts_type": tts_type,
+                    "sampling_rate": sample_rate,
+                    "lang": lang,
+                }
+                with open(metadata_json_path, 'w', encoding='utf-8') as f:
+                    json.dump(common_metadata, f, indent=4, ensure_ascii=False)
+                self.logger.info(f"✅ Created metadata.json at {metadata_json_path}")
+
+            # --- Handle text_audio.tsv (specific data) ---
+            # Initialize TSV with header if it doesn't exist
+            if not text_audio_tsv_path.exists():
+                with open(text_audio_tsv_path, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f, delimiter='\t')
+                    writer.writerow(["utt_id", "text_id", "text", "audio_path", "duration", "gen_date"])
+
+            # Count current lines to create utt_id
+            with open(text_audio_tsv_path, 'r', encoding='utf-8') as f:
+                current_count = sum(1 for _ in f) - 1  # Exclude header
+
+            utt_id = f"{current_count + 1:05d}"  # Pad to 5 digits for more files
 
             # Estimate duration if not provided
             if duration is None:
                 duration = self._estimate_duration(text)
 
-            # Prepare data (TSV format)
+            # Prepare data for TSV
             entry = [
                 utt_id,
-                text_id or "",  # text_id from input, empty if not provided
+                text_id or "",
                 text,
-                str(audio_path),
-                provider,
-                model,
-                voice,
-                tts_type,
-                str(sample_rate),
-                "vi",  # language mặc định
+                str(audio_path.relative_to(voice_dir)),  # Store relative path
                 f"{duration:.2f}",
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             ]
 
-            # Write to TSV file
-            with open(metadata_file, 'a', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f, delimiter='	')  # Use tab delimiter for TSV
+            # Append to TSV file
+            with open(text_audio_tsv_path, 'a', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f, delimiter='\t')
                 writer.writerow(entry)
 
-            self.logger.debug(f"✅ Added metadata for: {audio_path}")
+            self.logger.debug(f"✅ Appended metadata for {audio_path.name} to {text_audio_tsv_path}")
             return True
 
         except Exception as e:
