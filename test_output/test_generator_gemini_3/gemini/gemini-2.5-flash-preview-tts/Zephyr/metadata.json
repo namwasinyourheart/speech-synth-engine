@@ -1,0 +1,8 @@
+{
+    "provider": "gemini",
+    "model": "gemini-2.5-flash-preview-tts",
+    "voice": "Zephyr",
+    "tts_type": "synthesize",
+    "sampling_rate": 24000,
+    "lang": "vi"
+}

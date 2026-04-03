@@ -1,0 +1,8 @@
+{
+    "provider": "gemini",
+    "model": "default",
+    "voice": "Charon",
+    "tts_type": "synthesize",
+    "sampling_rate": 24000,
+    "lang": "vi"
+}

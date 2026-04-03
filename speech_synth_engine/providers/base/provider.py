@@ -74,8 +74,11 @@ class TTSProvider(ABC):
 
         return max(min_duration, min(max_duration, estimated_seconds))
 
-    def get_file_info(self, output_file: Path) -> Dict[str, Any]:
+    def get_file_info(self, output_file: str | Path) -> Dict[str, Any]:
         """Get information about the output file after synthesizing"""
+        if isinstance(output_file, str):
+            output_file = Path(output_file)
+            
         if not output_file.exists():
             return {}
 

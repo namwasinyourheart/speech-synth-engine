@@ -47,8 +47,34 @@ class SeleniumProvider(TTSProvider):
         self.timeout = self.config.get('timeout', 30)
         self.download_timeout = self.config.get('download_timeout', 120)
 
+        # Chrome profile configuration (persistent login)
+        # If chrome_profile_name is provided, we will use a persistent profile directory:
+        #   chrome_profiles_base_dir / chrome_profile_name
+        # Example: /home/nampv1/selenium-chrome-profiles/acc1
+        self.chrome_profile_name: Optional[str] = (
+            self.config.get('chrome_profile_name')
+            or self.config.get('chrome_profile')
+            or os.environ.get('CHROME_PROFILE_NAME')
+        )
+        self.chrome_profiles_base_dir: str = self.config.get(
+            'chrome_profiles_base_dir', os.environ.get('CHROME_PROFILES_BASE_DIR', '/home/nampv1/selenium-chrome-profiles')
+        )
+        # For backward compatibility: allow forcing persistent profile via flag or env
+        env_use_persistent = os.environ.get('USE_PERSISTENT_PROFILE')
+        self.use_persistent_profile: bool = bool(
+            self.config.get('use_persistent_profile', bool(self.chrome_profile_name))
+            or (env_use_persistent and env_use_persistent not in ('0', 'false', 'False'))
+        )
+
         # Authentication configuration
         self.auth_config = self.config.get('auth', {})
+
+        # If running in LOGIN_ONLY mode, force a visible browser to allow manual interaction/CAPTCHA
+        try:
+            if os.environ.get('LOGIN_ONLY') and os.environ.get('LOGIN_ONLY') not in ('0', 'false', 'False'):
+                self.headless = False
+        except Exception:
+            pass
 
         # Driver instance
         self.driver: Optional[webdriver.Chrome] = None
@@ -56,7 +82,8 @@ class SeleniumProvider(TTSProvider):
         # Session management
         self.is_authenticated = False
         self.main_window = None
-        self.profile_dir: Optional[str] = None  # unique Chrome profile per instance
+        self.profile_dir: Optional[str] = None  # Chrome profile directory (temp or persistent)
+        self._is_temp_profile: bool = False     # Track if the profile dir is temporary for cleanup
 
     def setup_driver(self) -> bool:
         """
@@ -69,9 +96,28 @@ class SeleniumProvider(TTSProvider):
                 self.logger.error("❌ undetected_chromedriver is required but not installed")
                 return False
 
-            # Create an isolated temporary Chrome profile dir for this instance
-            # This avoids profile locking/conflicts when running multiple scripts concurrently
-            self.profile_dir = tempfile.mkdtemp(prefix="uc_profile_")
+            # Decide profile directory: persistent (if configured) or temporary
+            if self.use_persistent_profile:
+                # Build persistent profile path
+                if not self.chrome_profile_name:
+                    # Allow deriving from shard env variables for convenience
+                    # e.g., SHARD_GOOGLE_EMAIL=abc@gmail.com -> profile name 'abc'
+                    shard_email = os.environ.get('SHARD_GOOGLE_EMAIL', '')
+                    if shard_email:
+                        self.chrome_profile_name = shard_email.split('@')[0]
+                base_dir = self.chrome_profiles_base_dir
+                os.makedirs(base_dir, exist_ok=True)
+                if not self.chrome_profile_name:
+                    # Fall back to a generic name if none provided
+                    self.chrome_profile_name = f"profile_{os.getpid()}"
+                self.profile_dir = os.path.join(base_dir, self.chrome_profile_name)
+                os.makedirs(self.profile_dir, exist_ok=True)
+                self._is_temp_profile = False
+            else:
+                # Create an isolated temporary Chrome profile dir for this instance
+                # This avoids profile locking/conflicts when running multiple scripts concurrently
+                self.profile_dir = tempfile.mkdtemp(prefix="uc_profile_")
+                self._is_temp_profile = True
 
             options = Options()
 
@@ -85,8 +131,9 @@ class SeleniumProvider(TTSProvider):
             options.add_argument('--disable-dev-shm-usage')
             options.add_argument('--disable-gpu')
             options.add_argument(f'--window-size={self.window_size}')
-            # options.add_argument(f'--user-data-dir={self.profile_dir}')
-            options.add_argument(f"--user-data-dir=/tmp/chrome_profile_{os.getpid()}")
+            # Use the chosen profile directory (persistent or temporary)
+            options.add_argument(f'--user-data-dir={self.profile_dir}')
+            options.add_argument('--profile-directory=Default')
             options.add_argument('--no-first-run')
             options.add_argument('--no-default-browser-check')
             options.add_argument('--disable-popup-blocking')
@@ -130,13 +177,18 @@ class SeleniumProvider(TTSProvider):
                 except Exception:
                     pass
 
-                self.logger.info("✅ Using undetected_chromedriver with isolated profile")
+                profile_mode = "persistent" if not self._is_temp_profile else "temporary"
+                self.logger.info(f"✅ Using undetected_chromedriver with {profile_mode} profile")
+                try:
+                    self.logger.info(f"   📁 Chrome profile dir: {self.profile_dir}")
+                except Exception:
+                    pass
                 return True
             except Exception as e:
                 self.logger.error(f"❌ Failed to initialize undetected_chromedriver: {e}")
                 # Cleanup temp profile dir on failure
                 try:
-                    if self.profile_dir and os.path.isdir(self.profile_dir):
+                    if self._is_temp_profile and self.profile_dir and os.path.isdir(self.profile_dir):
                         shutil.rmtree(self.profile_dir, ignore_errors=True)
                         self.profile_dir = None
                 except Exception:
@@ -147,7 +199,7 @@ class SeleniumProvider(TTSProvider):
             self.logger.error(f"❌ Failed to setup driver: {e}")
             # Cleanup temp profile dir on failure
             try:
-                if self.profile_dir and os.path.isdir(self.profile_dir):
+                if self._is_temp_profile and self.profile_dir and os.path.isdir(self.profile_dir):
                     shutil.rmtree(self.profile_dir, ignore_errors=True)
                     self.profile_dir = None
             except Exception:
@@ -317,9 +369,9 @@ class SeleniumProvider(TTSProvider):
             finally:
                 self.driver = None
                 self.is_authenticated = False
-        # Remove temporary profile directory if created
+        # Remove temporary profile directory if created (do not remove persistent profiles)
         try:
-            if self.profile_dir and os.path.isdir(self.profile_dir):
+            if self._is_temp_profile and self.profile_dir and os.path.isdir(self.profile_dir):
                 shutil.rmtree(self.profile_dir, ignore_errors=True)
                 self.profile_dir = None
         except Exception as e:

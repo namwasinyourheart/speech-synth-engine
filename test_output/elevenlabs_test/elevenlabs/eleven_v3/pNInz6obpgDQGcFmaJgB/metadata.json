@@ -1,0 +1,8 @@
+{
+    "provider": "elevenlabs",
+    "model": "eleven_v3",
+    "voice": "pNInz6obpgDQGcFmaJgB",
+    "tts_type": "synthesize",
+    "sampling_rate": null,
+    "lang": "vi"
+}

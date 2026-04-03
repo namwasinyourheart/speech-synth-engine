@@ -39,12 +39,14 @@ class ProviderFactory:
             from ..gemini_provider import GeminiTTSProvider
             from ..vnpost_provider import VnPostTTSProvider
             from ..minimax_selenium_provider import MiniMaxSeleniumProvider
+            from ..elevenlabs_provider import ElevenLabsProvider
 
             self._provider_classes.update({
                 'gtts': GTTSProvider,        
                 'gemini': GeminiTTSProvider, 
                 'vnpost': VnPostTTSProvider,
-                'minimax_selenium': MiniMaxSeleniumProvider
+                'minimax_selenium': MiniMaxSeleniumProvider,
+                'elevenlabs': ElevenLabsProvider
             })
 
             self.logger.info(f"✅ Registered {len(self._provider_classes)} built-in providers")

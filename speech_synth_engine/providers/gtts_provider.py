@@ -32,7 +32,7 @@ class GTTSProvider(TTSProvider):
         """GTTS supports Vietnamese by default"""
         return ["vi"]
 
-    def synthesize(self, text: str, voice: str, output_file: Path) -> bool:
+    def synthesize(self, text: str, voice: str, output_file: str | Path) -> bool:
         """
         Synthesize with validation and improved error handling.
         """
@@ -46,6 +46,10 @@ class GTTSProvider(TTSProvider):
             if voice not in self.supported_voices:
                 self.logger.error(f"Voice '{voice}' is not supported. Available voices: {self.supported_voices}")
                 return False
+
+            # Normalize output path and ensure directory exists
+            output_path = Path(output_file) if isinstance(output_file, str) else output_file
+            output_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Create temporary MP3 file from gTTS
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_mp3:
@@ -63,16 +67,16 @@ class GTTSProvider(TTSProvider):
                 audio = audio.set_frame_rate(self.sample_rate)
 
                 # Save WAV
-                audio.export(str(output_file), format="wav")
+                audio.export(str(output_path), format="wav")
 
                 # Enhanced: return success/failure with detailed information
-                if output_file.exists():
-                    file_size = output_file.stat().st_size
+                if output_path.exists():
+                    file_size = output_path.stat().st_size
                     duration = self.estimate_duration(text)
-                    self.logger.info(f"✅ GTTS synthesis successful: {output_file} ({file_size/1024:.1f}KB, {duration:.2f}s)")
+                    self.logger.info(f"✅ GTTS synthesis successful: {output_path} ({file_size/1024:.1f}KB, {duration:.2f}s)")
                     return True
                 else:
-                    self.logger.error(f"❌ GTTS file was not created: {output_file}")
+                    self.logger.error(f"❌ GTTS file was not created: {output_path}")
                     return False
 
             finally:

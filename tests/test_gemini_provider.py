@@ -25,14 +25,18 @@ def setup_logging():
         ]
     )
 
-def test_enhanced_gemini_provider():
+def test_enhanced_gemini_provider(use_vertex_ai: bool = False):
     """
     Test Gemini Provider với enhanced system mới.
+    
+    Args:
+        use_vertex_ai: Whether to use Vertex AI authentication
     """
-    print("🧪 Testing Enhanced Gemini Provider...")
+    test_type = "Vertex AI" if use_vertex_ai else "API Key"
+    print(f"🧪 Testing Enhanced Gemini Provider ({test_type})...")
 
     # Cấu hình output
-    output_dir = Path("test_output/enhanced_gemini")
+    output_dir = Path(f"test_output/enhanced_gemini_{'vertex' if use_vertex_ai else 'api'}")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Test text tiếng Việt
@@ -46,6 +50,15 @@ def test_enhanced_gemini_provider():
             "language": "vi"
         }
     }
+    
+    # Thêm cấu hình Vertex AI nếu cần
+    if use_vertex_ai:
+        providers_config["gemini"].update({
+            "use_vertex_ai": True,
+            "credentials_path": os.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
+            "project_id": os.getenv("GOOGLE_CLOUD_PROJECT"),
+            "location": "us-central1"
+        })
 
     try:
         # Khởi tạo enhanced generator
@@ -56,8 +69,8 @@ def test_enhanced_gemini_provider():
 
         # Test generation với Gemini
         summary = generator.generate_from_text_list(
-            texts=[test_text],
-            provider_model_voice_list=[("gemini", "default", "Kore")],
+            text_items=[("test_1", test_text)],
+            provider_model_voice=("gemini", "default", "Kore"),
             batch_size=1,
             delay_between_requests=2.0  # Gemini cần thời gian xử lý
         )
@@ -114,8 +127,8 @@ def test_gemini_multiple_voices():
             print(f"🎤 Testing voice: {voice}")
 
             summary = generator.generate_from_text_list(
-                texts=[test_text],
-                provider_model_voice_list=[("gemini", "default", voice)],
+                text_items=[(f"test_voice_{voice}", test_text)],
+                provider_model_voice=("gemini", "default", voice),
                 batch_size=1,
                 delay_between_requests=3.0  # Gemini cần thời gian xử lý lâu hơn
             )
@@ -243,46 +256,144 @@ def test_gemini_different_models():
         print(f"❌ Lỗi test different models: {e}")
         return False
 
-def main():
-    """Chạy tất cả tests cho Gemini enhanced"""
-    print("🎯 Enhanced Gemini Provider Test Suite")
-    print("=" * 50)
+def test_enhanced_gemini_provider(use_vertex_ai=False):
+    """Test Gemini với enhanced system"""
+    print("\n🧪 Testing Enhanced Gemini Provider...")
 
-    setup_logging()
+    test_text = "Đây là test với enhanced system của Gemini TTS Provider"
 
-    # Kiểm tra API key trước
-    if not os.environ.get('GEMINI_API_KEY'):
-        print("⚠️  CẢNH BÁO: GEMINI_API_KEY không được thiết lập!")
-        print("   Các tests sẽ thất bại nếu không có API key hợp lệ.")
+    output_dir = Path("test_output/enhanced_gemini")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    providers_config = {
+        "gemini": {
+            "sample_rate": 24000,
+            "model": "gemini-2.5-flash-preview-tts",
+            "language": "vi"
+        }
+    }
+
+    try:
+        # Khởi tạo enhanced generator
+        generator = DatasetGenerator(
+            output_dir=output_dir,
+            providers_config=providers_config,
+            use_vertex_ai=use_vertex_ai
+        )
+
+        # Test generation với Gemini
+        summary = generator.generate_from_text_list(
+            text_items=[("test_1", test_text)],
+            provider_model_voice=("gemini", "default", "Kore"),
+            batch_size=1,
+            delay_between_requests=2.0  # Gemini cần thời gian xử lý
+        )
+
+        # Kiểm tra kết quả
+        if summary.successful_generations > 0:
+            print("✅ Enhanced Gemini Provider test THÀNH CÔNG!")
+
+            # Hiển thị thông tin file được tạo
+            result = summary.results[0]
+            print(f"📁 Audio file: {result.audio_path}")
+            print(f"📋 Metadata file: {result.metadata_path}")
+            print(f"⏱️ Duration: {result.duration:.2f}s")
+
+            # Kiểm tra file tồn tại
+            if result.audio_path.exists():
+                file_size = result.audio_path.stat().st_size
+                print(f"📊 File size: {file_size / 1024:.2f} KB")
+
+            return True
+        else:
+            print(f"❌ Test thất bại: {summary.errors}")
+            return False
+
+    except Exception as e:
+        print(f"❌ Lỗi khi test Enhanced Gemini Provider: {e}")
         return False
 
-    tests = [
-        # ("Enhanced Gemini Provider", test_enhanced_gemini_provider),
-        ("Multiple Voices", test_gemini_multiple_voices),
-        # ("Long Text", test_gemini_long_text),
-        # ("Different Models", test_gemini_different_models)
-    ]
-
+def main():
+    """Chạy tất cả tests cho Gemini enhanced"""
+    setup_logging()
+    logger = logging.getLogger(__name__)
+    
     results = []
-
-    for test_name, test_func in tests:
-        print(f"\n{'=' * 50}")
-        print(f"Running: {test_name}")
-        print('=' * 50)
-
+    all_passed = True
+    
+    # Test với API Key
+    test_name_api = "Gemini API Key Test"
+    try:
+        logger.info("🚀 Bắt đầu test Gemini Provider với API Key...")
+        success = test_enhanced_gemini_provider(use_vertex_ai=False)
+        results.append((test_name_api, success))
+        
+        if success:
+            logger.info("✅ Test Gemini Provider với API Key thành công!")
+            print(f"✅ {test_name_api}: PASSED")
+        else:
+            logger.error("❌ Test Gemini Provider với API Key thất bại!")
+            print(f"❌ {test_name_api}: FAILED")
+            all_passed = False
+    except Exception as e:
+        logger.error(f"❌ Lỗi khi test với API Key: {e}", exc_info=True)
+        print(f"💥 {test_name_api}: ERROR - {e}")
+        results.append((test_name_api, False))
+        all_passed = False
+    
+    # Test với Vertex AI nếu có thông tin xác thực
+    test_name_vertex = "Gemini Vertex AI Test"
+    if os.getenv("GOOGLE_APPLICATION_CREDENTIALS") and os.getenv("GOOGLE_CLOUD_PROJECT"):
         try:
+            logger.info("\n🚀 Bắt đầu test Gemini Provider với Vertex AI...")
+            success = test_enhanced_gemini_provider(use_vertex_ai=True)
+            results.append((test_name_vertex, success))
+            
+            if success:
+                logger.info("✅ Test Gemini Provider với Vertex AI thành công!")
+                print(f"✅ {test_name_vertex}: PASSED")
+            else:
+                logger.error("❌ Test Gemini Provider với Vertex AI thất bại!")
+                print(f"❌ {test_name_vertex}: FAILED")
+                all_passed = False
+                
+        except Exception as e:
+            logger.error(f"❌ Lỗi khi test với Vertex AI: {e}", exc_info=True)
+            print(f"💥 {test_name_vertex}: ERROR - {e}")
+            results.append((test_name_vertex, False))
+            all_passed = False
+    else:
+        logger.warning("\n⚠️ Bỏ qua test Vertex AI do thiếu thông tin xác thực")
+        logger.warning("Vui lòng đặt biến môi trường GOOGLE_APPLICATION_CREDENTIALS và GOOGLE_CLOUD_PROJECT")
+        print("⚠️ Skipping Vertex AI tests - Missing authentication")
+    
+    # Chạy các test khác
+    test_functions = [
+        ("Multiple Voices Test", test_gemini_multiple_voices),
+        ("Long Text Test", test_gemini_long_text),
+        ("Different Models Test", test_gemini_different_models)
+    ]
+    
+    for test_name, test_func in test_functions:
+        try:
+            logger.info(f"\n🚀 Bắt đầu test: {test_name}")
             success = test_func()
             results.append((test_name, success))
-
+            
             if success:
+                logger.info(f"✅ {test_name} thành công!")
                 print(f"✅ {test_name}: PASSED")
             else:
+                logger.error(f"❌ {test_name} thất bại!")
                 print(f"❌ {test_name}: FAILED")
-
+                all_passed = False
+                
         except Exception as e:
+            logger.error(f"❌ Lỗi khi chạy {test_name}: {e}", exc_info=True)
             print(f"💥 {test_name}: ERROR - {e}")
             results.append((test_name, False))
-
+            all_passed = False
+    
     # Tổng kết
     print(f"\n{'=' * 50}")
     print("📊 GEMINI ENHANCED TEST SUMMARY")
@@ -297,12 +408,15 @@ def main():
 
     print(f"\n🎯 Overall: {passed}/{total} tests passed")
 
-    if passed == total:
-        print("🎉 All Gemini enhanced tests PASSED! Gemini hoạt động tốt với enhanced system.")
-        return True
+    if all_passed and passed == total:
+        print("🎉 Tất cả tests đều PASSED! Gemini hoạt động tốt với enhanced system.")
     else:
-        print("⚠️ Một số tests thất bại. Kiểm tra GEMINI_API_KEY và kết nối mạng.")
-        return False
+        print("\n⚠️ Một số tests thất bại. Vui lòng kiểm tra log để biết chi tiết.")
+        if not (os.getenv("GOOGLE_APPLICATION_CREDENTIALS") and os.getenv("GOOGLE_CLOUD_PROJECT")):
+            print("⚠️ Lưu ý: Các test Vertex AI đã bị bỏ qua do thiếu thông tin xác thực.")
+            print("   Vui lòng đặt biến môi trường GOOGLE_APPLICATION_CREDENTIALS và GOOGLE_CLOUD_PROJECT")
+    
+    return all_passed and (passed == total)
 
 if __name__ == "__main__":
     success = main()

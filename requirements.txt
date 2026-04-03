@@ -2,3 +2,4 @@ selenium==4.37.0
 soundfile
 numpy
 undetected-chromedriver==3.5.5
+google-genai==1.57.0

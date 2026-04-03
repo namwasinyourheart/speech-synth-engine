@@ -1,0 +1,84 @@
+2025-12-28 09:11:14,879 | ProviderFactory | INFO | ✅ Registered 4 built-in providers
+2025-12-28 09:11:14,944 | ProviderFactory | INFO | ✅ Created provider: gemini
+2025-12-28 09:11:14,945 | DatasetGenerator | INFO | ✅ DatasetGenerator initialized with 1 providers
+2025-12-28 09:13:02,157 | ProviderFactory | INFO | ✅ Registered 4 built-in providers
+2025-12-28 09:13:02,223 | ProviderFactory | INFO | ✅ Created provider: gemini
+2025-12-28 09:13:02,223 | DatasetGenerator | INFO | ✅ DatasetGenerator initialized with 1 providers
+2025-12-28 09:13:54,009 | ProviderFactory | INFO | ✅ Registered 4 built-in providers
+2025-12-28 09:13:54,073 | ProviderFactory | INFO | ✅ Created provider: gemini
+2025-12-28 09:13:54,073 | DatasetGenerator | INFO | ✅ DatasetGenerator initialized with 1 providers
+2025-12-28 09:13:54,073 | DatasetGenerator | INFO | Starting synthesize operation for 1 text items with provider configuration ('gemini', 'default', 'Kore')
+2025-12-28 09:13:54,073 | DatasetGenerator | INFO | 🚀 Starting synthesize generation with 1 text items using provider gemini (model: default, voice: Kore)
+2025-12-28 09:13:54,074 | DirectoryManager | INFO | ✅ Directory structure created:
+2025-12-28 09:13:54,074 | DirectoryManager | INFO |    Provider: gemini
+2025-12-28 09:13:54,074 | DirectoryManager | INFO |    Model: default
+2025-12-28 09:13:54,074 | DirectoryManager | INFO |    Voice: Kore
+2025-12-28 09:13:54,074 | DirectoryManager | INFO |    WAV dir: test_output/enhanced_gemini_voices/gemini/default/Kore/wav
+2025-12-28 09:13:54,074 | TTSProvider.gemini | INFO | 🔄 Calling Gemini TTS API for text: Đây là test với nhiều giọng nói khác nhau của Gemi...
+2025-12-28 09:13:54,075 | google_genai.models | INFO | AFC is enabled with max remote calls: 10.
+2025-12-28 09:13:57,802 | httpx | INFO | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent "HTTP/1.1 200 OK"
+2025-12-28 09:13:57,911 | TTSProvider.gemini | INFO | ✅ Gemini synthesis successful: test_output/enhanced_gemini_voices/gemini/default/Kore/wav/test_voice_Kore_Đây_là_test_với_nhiều_giọng_nói_khác_nhau_của_Gemi.wav (210.6KB, 4.67s)
+2025-12-28 09:13:57,911 | DirectoryManager | INFO | ✅ Created metadata.json at test_output/enhanced_gemini_voices/gemini/default/Kore/metadata.json
+2025-12-28 09:14:00,912 | DatasetGenerator | INFO | 📊 Generation Summary:
+2025-12-28 09:14:00,912 | DatasetGenerator | INFO |    Total texts: 1
+2025-12-28 09:14:00,912 | DatasetGenerator | INFO |    ✅ Successful generations: 1
+2025-12-28 09:14:00,912 | DatasetGenerator | INFO |    ⏭️ Skipped duplicates: 0
+2025-12-28 09:14:00,912 | DatasetGenerator | INFO |    ❌ Failed generations: 0
+2025-12-28 09:14:00,912 | DatasetGenerator | INFO |    ⏱️ Total duration: 6.84s
+2025-12-28 09:14:00,912 | DatasetGenerator | INFO |    📁 Output dir: test_output/enhanced_gemini_voices
+2025-12-28 09:14:00,912 | DatasetGenerator | INFO | Starting synthesize operation for 1 text items with provider configuration ('gemini', 'default', 'Fenrir')
+2025-12-28 09:14:00,912 | DatasetGenerator | INFO | 🚀 Starting synthesize generation with 1 text items using provider gemini (model: default, voice: Fenrir)
+2025-12-28 09:14:00,912 | DirectoryManager | INFO | ✅ Directory structure created:
+2025-12-28 09:14:00,912 | DirectoryManager | INFO |    Provider: gemini
+2025-12-28 09:14:00,912 | DirectoryManager | INFO |    Model: default
+2025-12-28 09:14:00,912 | DirectoryManager | INFO |    Voice: Fenrir
+2025-12-28 09:14:00,913 | DirectoryManager | INFO |    WAV dir: test_output/enhanced_gemini_voices/gemini/default/Fenrir/wav
+2025-12-28 09:14:00,913 | TTSProvider.gemini | INFO | 🔄 Calling Gemini TTS API for text: Đây là test với nhiều giọng nói khác nhau của Gemi...
+2025-12-28 09:14:00,913 | google_genai.models | INFO | AFC is enabled with max remote calls: 10.
+2025-12-28 09:14:04,550 | httpx | INFO | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent "HTTP/1.1 200 OK"
+2025-12-28 09:14:04,599 | TTSProvider.gemini | INFO | ✅ Gemini synthesis successful: test_output/enhanced_gemini_voices/gemini/default/Fenrir/wav/test_voice_Fenrir_Đây_là_test_với_nhiều_giọng_nói_khác_nhau_của_Gemi.wav (203.1KB, 4.67s)
+2025-12-28 09:14:04,599 | DirectoryManager | INFO | ✅ Created metadata.json at test_output/enhanced_gemini_voices/gemini/default/Fenrir/metadata.json
+2025-12-28 09:14:07,600 | DatasetGenerator | INFO | 📊 Generation Summary:
+2025-12-28 09:14:07,600 | DatasetGenerator | INFO |    Total texts: 1
+2025-12-28 09:14:07,600 | DatasetGenerator | INFO |    ✅ Successful generations: 1
+2025-12-28 09:14:07,600 | DatasetGenerator | INFO |    ⏭️ Skipped duplicates: 0
+2025-12-28 09:14:07,600 | DatasetGenerator | INFO |    ❌ Failed generations: 0
+2025-12-28 09:14:07,600 | DatasetGenerator | INFO |    ⏱️ Total duration: 6.69s
+2025-12-28 09:14:07,600 | DatasetGenerator | INFO |    📁 Output dir: test_output/enhanced_gemini_voices
+2025-12-28 09:14:07,600 | DatasetGenerator | INFO | Starting synthesize operation for 1 text items with provider configuration ('gemini', 'default', 'Charon')
+2025-12-28 09:14:07,600 | DatasetGenerator | INFO | 🚀 Starting synthesize generation with 1 text items using provider gemini (model: default, voice: Charon)
+2025-12-28 09:14:07,601 | DirectoryManager | INFO | ✅ Directory structure created:
+2025-12-28 09:14:07,601 | DirectoryManager | INFO |    Provider: gemini
+2025-12-28 09:14:07,601 | DirectoryManager | INFO |    Model: default
+2025-12-28 09:14:07,601 | DirectoryManager | INFO |    Voice: Charon
+2025-12-28 09:14:07,601 | DirectoryManager | INFO |    WAV dir: test_output/enhanced_gemini_voices/gemini/default/Charon/wav
+2025-12-28 09:14:07,601 | TTSProvider.gemini | INFO | 🔄 Calling Gemini TTS API for text: Đây là test với nhiều giọng nói khác nhau của Gemi...
+2025-12-28 09:14:07,601 | google_genai.models | INFO | AFC is enabled with max remote calls: 10.
+2025-12-28 09:14:12,177 | httpx | INFO | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent "HTTP/1.1 200 OK"
+2025-12-28 09:14:12,227 | TTSProvider.gemini | INFO | ✅ Gemini synthesis successful: test_output/enhanced_gemini_voices/gemini/default/Charon/wav/test_voice_Charon_Đây_là_test_với_nhiều_giọng_nói_khác_nhau_của_Gemi.wav (242.4KB, 4.67s)
+2025-12-28 09:14:12,228 | DirectoryManager | INFO | ✅ Created metadata.json at test_output/enhanced_gemini_voices/gemini/default/Charon/metadata.json
+2025-12-28 09:14:15,228 | DatasetGenerator | INFO | 📊 Generation Summary:
+2025-12-28 09:14:15,228 | DatasetGenerator | INFO |    Total texts: 1
+2025-12-28 09:14:15,228 | DatasetGenerator | INFO |    ✅ Successful generations: 1
+2025-12-28 09:14:15,228 | DatasetGenerator | INFO |    ⏭️ Skipped duplicates: 0
+2025-12-28 09:14:15,228 | DatasetGenerator | INFO |    ❌ Failed generations: 0
+2025-12-28 09:14:15,229 | DatasetGenerator | INFO |    ⏱️ Total duration: 7.63s
+2025-12-28 09:14:15,229 | DatasetGenerator | INFO |    📁 Output dir: test_output/enhanced_gemini_voices
+2025-12-28 09:14:15,229 | DatasetGenerator | INFO | Starting synthesize operation for 1 text items with provider configuration ('gemini', 'default', 'Aoede')
+2025-12-28 09:14:15,229 | DatasetGenerator | INFO | 🚀 Starting synthesize generation with 1 text items using provider gemini (model: default, voice: Aoede)
+2025-12-28 09:14:15,229 | DirectoryManager | INFO | ✅ Directory structure created:
+2025-12-28 09:14:15,229 | DirectoryManager | INFO |    Provider: gemini
+2025-12-28 09:14:15,229 | DirectoryManager | INFO |    Model: default
+2025-12-28 09:14:15,229 | DirectoryManager | INFO |    Voice: Aoede
+2025-12-28 09:14:15,229 | DirectoryManager | INFO |    WAV dir: test_output/enhanced_gemini_voices/gemini/default/Aoede/wav
+2025-12-28 09:14:15,229 | TTSProvider.gemini | ERROR | Voice 'Aoede' is not supported. Available voices: ['Zephyr', 'Puck', 'Charon', 'Kore', 'Fenrir', 'Leda', 'Callirrhoe', 'Despina', 'Erinome', 'Umbriel', 'Algieba', 'Iapetus', 'Enceladus', 'Algenib', 'Rasalgethi', 'Laomedeia', 'Schedar', 'Gacrux', 'Pulcherrima', 'Achird', 'Zubenelgenubi', 'Vindemiatrix', 'Sadachbia', 'Sadaltager', 'Sulafat']
+2025-12-28 09:14:18,230 | DatasetGenerator | INFO | 📊 Generation Summary:
+2025-12-28 09:14:18,230 | DatasetGenerator | INFO |    Total texts: 1
+2025-12-28 09:14:18,230 | DatasetGenerator | INFO |    ✅ Successful generations: 0
+2025-12-28 09:14:18,230 | DatasetGenerator | INFO |    ⏭️ Skipped duplicates: 0
+2025-12-28 09:14:18,230 | DatasetGenerator | INFO |    ❌ Failed generations: 1
+2025-12-28 09:14:18,230 | DatasetGenerator | INFO |    ⏱️ Total duration: 3.00s
+2025-12-28 09:14:18,230 | DatasetGenerator | INFO |    📁 Output dir: test_output/enhanced_gemini_voices
+2025-12-28 09:14:18,230 | DatasetGenerator | WARNING | ⚠️ 1 errors during generation
+2025-12-28 09:14:18,230 | DatasetGenerator | INFO | 🔍 A few errors detected:
+2025-12-28 09:14:18,230 | DatasetGenerator | INFO |    ❌ Text 'Đây là test với nhiều giọng nói khác nhau của Gemi...' (ID: test_voice_Aoede): Synthesis failed

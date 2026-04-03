@@ -32,3 +32,6 @@
 2025-10-18 08:33:10,544 | DatasetGenerator | INFO |    ❌ Failed generations: 0
 2025-10-18 08:33:10,544 | DatasetGenerator | INFO |    ⏱️ Total duration: 4.26s
 2025-10-18 08:33:10,544 | DatasetGenerator | INFO |    📁 Output dir: tests/test_output/gtts_multiple
+2026-04-01 21:25:41,787 | ProviderFactory | INFO | ✅ Registered 5 built-in providers
+2026-04-01 21:25:41,787 | ProviderFactory | INFO | ✅ Created provider: gtts
+2026-04-01 21:25:41,787 | DatasetGenerator | INFO | ✅ DatasetGenerator initialized with 1 providers

@@ -1,0 +1,29 @@
+AudioConfig:
+    encoding (pcm, mp3, )
+    container/format: raw, wav, mp3
+        raw -> encoding: pcm_f32le, pcm_s16le, pcm_mulaw, pcm_alaw
+        wav -> encoding: pcm_f32le, pcm_s16le, pcm_mulaw, pcm_alaw
+        mp3 -> mp3 (bản thân mp3 là 1 encoding, không cần config thêm khi playback)
+
+    bit_rate: 64kbps, 128kbps, 192kbps, 256kbps, 320kbps
+    sample_rate: 8000, 16000, 22050, 24000, 32000, 44100
+    channel: 1 (mono), 2 (stereo)
+
+VoiceConfig:
+    voice_id
+    language
+    volume
+    speed
+    pitch
+    emotion
+
+ProviderConfig:
+    models: List of model indentifiers available from this provider
+    credentials (google cloud vertex ai)
+        envs: List of env variable names containing the API Key, may be api_key, credential_path (GEMINI_API_KEY, GCP_CREDENTIAL_PATH, GCP_LOCATION, GCP_PROJECT_ID, ..)
+        
+
+pronunciation_dict
+
+
+gtts: 

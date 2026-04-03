@@ -49,6 +49,28 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
 
             # Store main window handle
             self.main_window = self.driver.current_window_handle
+
+            # Quick check: if already logged in (no Sign In button), skip login
+            try:
+                signin_probe = self.wait_for_element(
+                    By.XPATH,
+                    "//*[@id='video-user-component']//div[contains(text(),'Sign In')]",
+                    timeout=5
+                )
+                if not signin_probe:
+                    # Additional sanity check: look for textarea of cloning form
+                    main_ui = self.wait_for_element(
+                        By.XPATH,
+                        "//*[@id='voices-cloning-form']//textarea",
+                        timeout=5
+                    )
+                    if main_ui:
+                        self.is_authenticated = True
+                        self.logger.info("✅ Session already authenticated (persistent profile)")
+                        return True
+            except Exception:
+                # If probing fails silently, continue with normal auth
+                pass
             
             # Check and handle CAPTCHA if present
             if not self._handle_captcha():
