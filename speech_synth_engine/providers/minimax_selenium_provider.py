@@ -15,6 +15,7 @@ from selenium.common.exceptions import TimeoutException, WebDriverException, NoS
 from selenium.webdriver.support.ui import WebDriverWait
 
 from .base.selenium_provider import SeleniumProvider
+from speech_synth_engine.schemas.schemas import SynthesisResult
 
 
 class MiniMaxSeleniumProvider(SeleniumProvider):
@@ -151,6 +152,7 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
                     self.logger.info("✅ Closed Get Started modal")
             except Exception as e:
                 self.logger.info("ℹ️ No Get Started modal found (already authenticated)")
+                self.last_error = str(e)
 
             self.is_authenticated = True
             self.logger.info("✅ MiniMax authentication successful")
@@ -158,6 +160,7 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
 
         except Exception as e:
             self.logger.error(f"❌ Authentication error: {e}")
+            self.last_error = str(e)
             self.take_screenshot("minimax_auth_error.png")
             self.close_extra_windows(self.main_window)
             return False
@@ -569,7 +572,7 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
             self.take_screenshot("minimax_generate_voice_error.png")
             return False, None
 
-    def synthesize_with_metadata(self, text: str, voice: str, output_file: Path) -> Dict[str, Any]:
+    def synthesize_with_metadata(self, text: str, voice: str, output_file: Path) -> SynthesisResult:
         """
         Synthesize with comprehensive metadata information.
         For MiniMax, this requires a reference audio for voice cloning.
@@ -578,13 +581,10 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
             'success': False,
             'text': text,
             'voice': voice,
-            'output_file': str(output_file),
+            'output_file': None,
             'provider': self.name,
             'sample_rate': self.sample_rate,
             'language': self.language,
-            'estimated_duration': self.estimate_duration(text),
-            'error': None,
-            'file_info': {},
             'audio_url': None
         }
 
@@ -594,29 +594,29 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
             reference_audio = self._find_reference_audio()
 
             if not reference_audio:
-                result['error'] = "No reference audio uploaded and none provided. Please provide a reference audio file for voice cloning."
+                result['error'] = {'message': 'No reference audio uploaded and none provided. Please provide a reference audio file for voice cloning.'}
                 return result
 
             # Setup driver and authenticate
             if not self.driver:
                 if not self.setup_driver():
-                    result['error'] = "Failed to setup driver"
+                    result['error'] = {'message': 'Failed to setup driver'}
                     return result
 
             if not self.navigate_to_base_url():
-                result['error'] = "Failed to navigate to MiniMax"
+                result['error'] = {'message': 'Failed to navigate to MiniMax'}
                 return result
 
             if not self.is_authenticated:
                 if not self.authenticate():
-                    result['error'] = "Authentication failed"
+                    result['error'] = {'message': 'Authentication failed'}
                     return result
 
             # Generate voice with reference audio (MiniMax voice cloning)
             success, audio_url = self.generate_voice(text, reference_audio)
 
             if not success or not audio_url:
-                result['error'] = "Voice generation failed"
+                result['error'] = {'message': 'Voice generation failed'}
                 return result
 
             result['audio_url'] = audio_url
@@ -624,13 +624,13 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
             # Download audio
             if self.download_audio(audio_url, output_file):
                 result['success'] = True
-                result['file_info'] = self.get_file_info(output_file)
+                result['output_file'] = str(output_file)
                 self.logger.info(f"✅ MiniMax synthesis successful: {output_file}")
             else:
-                result['error'] = "Audio download failed"
+                result['error'] = {'message': 'Audio download failed'}
 
         except Exception as e:
-            result['error'] = str(e)
+            result['error'] = {'message': 'MiniMax synthesis error', 'detail': str(e)}
             self.logger.error(f"❌ MiniMax synthesis error: {e}")
             self.take_screenshot("minimax_synthesis_error.png")
 
@@ -677,13 +677,11 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
             'success': False,
             # 'text': text,
             # 'voice': 'cloned_voice',
-            # 'output_file': str(output_file),
+            'output_file': None,
             # 'provider': self.name,
             # 'sample_rate': self.sample_rate,
             # 'language': self.language,
             # 'estimated_duration': self.estimate_duration(text),
-            'error': None,
-            # 'file_info': {},
             # 'audio_url': None,
             # 'reference_audio': str(reference_audio)
         }
@@ -692,15 +690,15 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
             # Setup driver and authenticate (only once)
             if not hasattr(self, '_initialized') or not self._initialized:
                 if not self.driver and not self.setup_driver():
-                    result['error'] = "Failed to setup driver"
+                    result['error'] = {'message': 'Failed to setup driver'}
                     return result
 
                 if not self.navigate_to_base_url():
-                    result['error'] = "Failed to navigate to MiniMax"
+                    result['error'] = {'message': 'Failed to navigate to MiniMax'}
                     return result
 
                 if not self.is_authenticated and not self.authenticate():
-                    result['error'] = "Authentication failed"
+                    result['error'] = {'message': 'Authentication failed'}
                     return result
                 
                 self._initialized = True
@@ -709,7 +707,7 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
             success, audio_url = self.generate_voice(text, reference_audio)
 
             if not success or not audio_url:
-                result['error'] = "Voice generation failed"
+                result['error'] = {'message': 'Voice generation failed'}
                 return result
 
             # result['audio_url'] = audio_url
@@ -717,13 +715,13 @@ class MiniMaxSeleniumProvider(SeleniumProvider):
             # Download audio
             if self.download_audio(audio_url, output_file):
                 result['success'] = True
-                # result['file_info'] = self.get_file_info(output_file)
+                result['output_file'] = str(output_file)
                 self.logger.info(f"✅ MiniMax voice cloning successful")
             else:
-                result['error'] = "Audio download failed"
+                result['error'] = {'message': 'Audio download failed'}
 
         except Exception as e:
-            result['error'] = str(e)
+            result['error'] = {'message': 'MiniMax voice cloning error', 'detail': str(e)}
             self.logger.error(f"❌ MiniMax voice cloning error: {e}")
             self.take_screenshot("minimax_cloning_error.png")
 

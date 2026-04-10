@@ -11,10 +11,17 @@ from typing import List, Dict, Tuple, Optional, Any, Union
 from dataclasses import dataclass
 import logging
 from tqdm import tqdm
+from rich.console import Console
+from rich.table import Table
+from rich import box
+from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
 
 # Import các thành phần đã tạo
 from ..providers.base.provider_factory import ProviderFactory
 from ..providers.base.provider import TTSProvider
+from ..schemas.provider import ProviderConfig, VoiceConfig, AudioConfig, ReplicatedVoiceConfig
+from ..schemas.generation import GenerateSpeechConfig, VoiceCloningConfig
 from .directory_manager import DirectoryManager
 
 @dataclass
@@ -62,17 +69,23 @@ class DatasetGenerator:
     and automatic directory structure management.
     """
 
-    def __init__(self, output_dir: Path, providers_config: Dict[str, Any] = None,
-                 config_file: Path = None):
+    def __init__(
+        self, 
+        output_dir: str | Path, 
+        providers_config: Dict[str, Any] = None,
+        config_file: Path = None,
+        use_rich: bool = True,
+        verbose: bool = False,
+    ) -> None:
         """
         Initialize Dataset Generator.
 
         Args:
-            output_dir: Main output directory
+            output_dir: Main output directory (str or Path)
             providers_config: Providers configuration (dict or from file)
             config_file: YAML config file (takes precedence over providers_config)
         """
-        self.output_dir = Path(output_dir)
+        self.output_dir = Path(output_dir) if not isinstance(output_dir, Path) else output_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Initialize components
@@ -80,6 +93,20 @@ class DatasetGenerator:
         self.directory_manager = DirectoryManager(self.output_dir)
         self.providers = {}
         self.logger = logging.getLogger("DatasetGenerator")
+        self.use_rich = use_rich
+        self.verbose = verbose
+        self.console = Console() if use_rich else None
+        
+        # Setup file logging
+        log_file = self.output_dir / "generation.log"
+        file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+        self.logger.addHandler(file_handler)
+        self.logger.setLevel(logging.DEBUG)
+        
+        # Prevent propagation to root logger to avoid console spam
+        self.logger.propagate = False
 
         # Load providers configuration
         if config_file and config_file.exists():
@@ -93,17 +120,80 @@ class DatasetGenerator:
                 except Exception as e:
                     self.logger.error(f"❌ Error creating provider {provider_name}: {e}")
 
-        if not self.providers:
-            self.logger.warning("⚠️ No providers were initialized")
+        if self.use_rich:
+            if not self.providers:
+                self.console.print("[dim]ℹ️ No providers initialized. Will auto-create when needed.[/dim]")
+            else:
+                self.console.print(f"[green]✅ DatasetGenerator initialized with {len(self.providers)} provider(s)[/green]")
+        
+        self.logger.debug(f"DatasetGenerator initialized with {len(self.providers)} provider(s), output_dir={self.output_dir}")
 
-        self.logger.info(f"✅ DatasetGenerator initialized with {len(self.providers)} providers")
+    def _process_batch(self,
+                      text_items: List[Tuple[str, str]],
+                      process_fn,
+                      batch_size: int = 10,
+                      delay_between_requests: float = 2,
+                      continue_on_error: bool = True,
+                      rich_desc: str = None,
+                      enable_concurrency: bool = False,
+                      max_workers: int = 4) -> Tuple[list, list]:
+        """Generic batch processing with error handling and delay. Optional concurrency."""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        all_results = []
+        errors = []
+        try:
+            for i in tqdm(range(0, len(text_items), batch_size), desc=rich_desc or "Processing batches"):
+                batch_items = text_items[i:i+batch_size]
+                if enable_concurrency:
+                    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                        future_to_item = {executor.submit(process_fn, text_id, text): (text_id, text) for text_id, text in batch_items if text.strip()}
+                        for future in as_completed(future_to_item):
+                            text_id, text = future_to_item[future]
+                            try:
+                                result = future.result()
+                                if result.success:
+                                    all_results.append(result)
+                                else:
+                                    self._handle_generation_error(errors, f"Text '{text[:50]}...' (ID: {text_id}): {result.error}", continue_on_error)
+                            except Exception as e:
+                                self._handle_generation_error(errors, f"Error with text '{text[:50]}...' (ID: {text_id}): {e}", continue_on_error)
+                            if delay_between_requests > 0:
+                                time.sleep(delay_between_requests)
+                else:
+                    for text_id, text in batch_items:
+                        if not text.strip():
+                            continue
+                        try:
+                            result = process_fn(text_id, text)
+                            if result.success:
+                                all_results.append(result)
+                            else:
+                                self._handle_generation_error(errors, f"Text '{text[:50]}...' (ID: {text_id}): {result.error}", continue_on_error)
+                        except Exception as e:
+                            self._handle_generation_error(errors, f"Error with text '{text[:50]}...' (ID: {text_id}): {e}", continue_on_error)
+                        if delay_between_requests > 0:
+                            time.sleep(delay_between_requests)
+        except KeyboardInterrupt:
+            self.logger.info("⏹️ Generation interrupted by user")
+        except Exception as e:
+            self.logger.error(f"❌ Critical error: {e}")
+            errors.append(f"Critical error: {e}")
+        return all_results, errors
+
+    def _handle_generation_error(self, errors: list, error_msg: str, continue_on_error: bool):
+        self.logger.error(f"❌ {error_msg}")
+        errors.append(error_msg)
+        if not continue_on_error:
+            raise Exception(error_msg)
 
     def synthesize_from_text_list(self, 
                                  text_items: List[Tuple[str, str]],
                                  provider_model_voice: Tuple[str, str, str],
                                  batch_size: int = 10,
                                  delay_between_requests: float = 2,
-                                 continue_on_error: bool = True) -> BatchGenerationSummary:
+                                 continue_on_error: bool = True,
+                                 generation_config: Optional[GenerateSpeechConfig] = None
+                                 ) -> BatchGenerationSummary:
         """
         Synthesize audio from text list with IDs using a single provider configuration.
 
@@ -124,55 +214,23 @@ class DatasetGenerator:
         provider_name, model, voice = provider_model_voice
         self.logger.info(f"🚀 Starting synthesize generation with {len(text_items)} text items using provider {provider_name} (model: {model}, voice: {voice})")
 
-        all_results = []
-        errors = []
         total_start_time = time.time()
-
-        try:
-            # Process in batches to optimize memory and progress tracking
-            for i in tqdm(range(0, len(text_items), batch_size), desc="Synthesizing batches"):
-                batch_items = text_items[i:i+batch_size]
-
-                for text_id, text in batch_items:
-                    if not text.strip():
-                        continue
-
-                    # Generate with the specified provider configuration
-                    try:
-                        result = self._generate_single_text(
-                            text_id, text, provider_name, model, voice, "synthesize"
-                        )
-
-                        if result.success:
-                            all_results.append(result)
-                        else:
-                            error_msg = f"Text '{text[:50]}...' (ID: {text_id}): {result.error}"
-                            errors.append(error_msg)
-                            if not continue_on_error:
-                                raise Exception(f"Generation failed: {error_msg}")
-
-                    except Exception as e:
-                        error_msg = f"Error with text '{text[:50]}...' (ID: {text_id}) and ({provider_name}, {model}, {voice}): {e}"
-                        self.logger.error(f"❌ {error_msg}")
-                        errors.append(error_msg)
-                        if not continue_on_error:
-                            raise
-
-                    # Delay between requests to avoid rate limit
-                    if delay_between_requests > 0:
-                        time.sleep(delay_between_requests)
-
-        except KeyboardInterrupt:
-            self.logger.info("⏹️ Generation interrupted by user")
-        except Exception as e:
-            self.logger.error(f"❌ Critical error: {e}")
-            errors.append(f"Critical error: {e}")
-
-        # Calculate statistics
+        provider_name, model, voice = provider_model_voice
+        def synth_fn(text_id, text):
+            return self._generate_single_text(
+                text_id, text, provider_name, model, voice, "synthesize", generation_config=generation_config
+            )
+        all_results, errors = self._process_batch(
+            text_items,
+            synth_fn,
+            batch_size=batch_size,
+            delay_between_requests=delay_between_requests,
+            continue_on_error=continue_on_error,
+            rich_desc="Synthesizing batches"
+        )
         total_duration = time.time() - total_start_time
         successful = len([r for r in all_results if r.success])
         failed = len(errors)
-
         summary = BatchGenerationSummary(
             total_texts=len(text_items),
             successful_generations=successful,
@@ -181,9 +239,10 @@ class DatasetGenerator:
             errors=errors,
             results=all_results
         )
-
         self._log_summary(summary)
         return summary
+
+    # Removed synthesize_from_text_list_config: superseded by generate_from_configs()
 
     def clone_from_text_list(self, 
                            text_items: List[Tuple[str, str]],
@@ -191,7 +250,8 @@ class DatasetGenerator:
                            reference_audio: Path,
                            batch_size: int = 10,
                            delay_between_requests: float = 2,
-                           continue_on_error: bool = True) -> BatchGenerationSummary:
+                           continue_on_error: bool = True
+                           ) -> BatchGenerationSummary:
         """
         Clone voice from reference audio for a list of texts using a single provider configuration.
 
@@ -206,6 +266,8 @@ class DatasetGenerator:
         Returns:
             A summary of the batch generation results.
         """
+        if reference_audio is not None and not isinstance(reference_audio, Path):
+            reference_audio = Path(reference_audio)
         if not reference_audio or not reference_audio.exists():
             raise ValueError("Reference audio is required and must exist for clone operations")
         if not text_items:
@@ -215,59 +277,28 @@ class DatasetGenerator:
         self.logger.info(f"🚀 Starting clone generation with {len(text_items)} text items for provider '{provider_name}'")
 
 
-        all_results = []
-        errors = []
         total_start_time = time.time()
-
-        try:
-            provider = self.providers.get(provider_name)
-            if not provider:
-                raise ValueError(f"Provider {provider_name} not found")
-
-            is_selenium = hasattr(provider, 'is_selenium') and provider.is_selenium
-
-            for i in tqdm(range(0, len(text_items), batch_size), desc=f"Cloning with {provider_name}"):
-                batch_items = text_items[i:i+batch_size]
-
-                for text_id, text in batch_items:
-                    if not text.strip():
-                        continue
-
-                    try:
-                        result = self.clone_single_text(
-                            text_id=text_id,
-                            text=text,
-                            provider_name=provider_name,
-                            reference_audio=reference_audio,
-                            voice=voice,
-                            model=model
-                        )
-
-                        if result.success:
-                            all_results.append(result)
-                        else:
-                            error_msg = f"Text '{text[:50]}...' (ID: {text_id}): {result.error}"
-                            self.logger.error(f"❌ {error_msg}")
-                            errors.append(error_msg)
-                            if not continue_on_error:
-                                raise Exception(f"Generation failed: {result.error}")
-                        
-                        if delay_between_requests > 0:
-                            time.sleep(delay_between_requests)
-
-                    except Exception as e:
-                        error_msg = f"Error with text '{text[:50]}...' (ID: {text_id}) and ({provider_name}, {model}, {voice}): {e}"
-                        self.logger.error(f"❌ {error_msg}")
-                        errors.append(error_msg)
-                        if not continue_on_error:
-                            raise
-
-        except KeyboardInterrupt:
-            self.logger.info("⏹️ Generation interrupted by user")
-        except Exception as e:
-            self.logger.error(f"❌ Critical error: {e}")
-            errors.append(f"Critical error: {e}")
-
+        provider_name, model, voice = provider_model_voice
+        provider = self.providers.get(provider_name)
+        if not provider:
+            raise ValueError(f"Provider {provider_name} not found")
+        def clone_fn(text_id, text):
+            return self.clone_single_text(
+                text_id=text_id,
+                text=text,
+                provider_name=provider_name,
+                reference_audio=reference_audio,
+                voice=voice,
+                model=model
+            )
+        all_results, errors = self._process_batch(
+            text_items,
+            clone_fn,
+            batch_size=batch_size,
+            delay_between_requests=delay_between_requests,
+            continue_on_error=continue_on_error,
+            rich_desc=f"Cloning with {provider_name}"
+        )
         total_duration = time.time() - total_start_time
         summary = BatchGenerationSummary(
             total_texts=len(text_items),
@@ -277,7 +308,6 @@ class DatasetGenerator:
             errors=errors,
             results=all_results
         )
-
         self._log_summary(summary)
         return summary
 
@@ -288,7 +318,9 @@ class DatasetGenerator:
                               delay_between_requests: float = 3,
                               continue_on_error: bool = True,
                               tts_type: str = "synthesize",
-                              reference_audio: Optional[Path] = None) -> BatchGenerationSummary:
+                              reference_audio: Optional[Path] = None,
+                              generation_config: Optional[GenerateSpeechConfig] = None
+                              ) -> BatchGenerationSummary:
         """
         Generate audio from text list with IDs using a single provider.
         This is a convenience method that routes to either synthesize_from_text_list or clone_from_text_list.
@@ -361,7 +393,8 @@ class DatasetGenerator:
                 provider_model_voice=provider_model_voice,
                 batch_size=batch_size,
                 delay_between_requests=delay_between_requests,
-                continue_on_error=continue_on_error
+                continue_on_error=continue_on_error,
+                generation_config=generation_config,
             )
         else:  # clone
             return self.clone_from_text_list(
@@ -373,8 +406,207 @@ class DatasetGenerator:
                 continue_on_error=continue_on_error
             )
 
+    def generate_from_configs(self,
+                              text_items: List[Tuple[str, str]],
+                              provider_config: ProviderConfig,
+                              generation_config: Union[GenerateSpeechConfig, VoiceCloningConfig],
+                              batch_size: int = 10,
+                              delay_between_requests: float = 3,
+                              continue_on_error: bool = True,
+                              tts_type: str = "synthesize",
+                              reference_audio: Optional[Path] = None,
+                              enable_concurrency: bool = False,
+                              max_workers: int = 4
+                              ) -> BatchGenerationSummary:
+        """
+        Generate audio using ProviderConfig and GenerateSpeechConfig/VoiceCloningConfig.
+
+        Behavior:
+        - If the provider named in ProviderConfig is not initialized yet, this method
+          will auto-create it using ProviderFactory and add it to self.providers.
+        - Runs the internal batch flow directly via _generate_from_configs_batch(),
+          threading GenerateSpeechConfig/VoiceCloningConfig to the provider where supported, and using
+          (provider, model, voice) to organize output directories and metadata.
+        """
+        if generation_config is None or provider_config is None:
+            raise ValueError("Both provider_config and generation_config are required")
+
+        provider_name = provider_config.name
+        model = generation_config.model
+        
+        # Extract voice identifier for directory naming
+        # For VoiceCloningConfig with ReplicatedVoiceConfig, use a placeholder
+        voice_cfg = generation_config.voice_config
+        if hasattr(voice_cfg, 'voice_id'):
+            voice = voice_cfg.voice_id
+        elif hasattr(voice_cfg, 'reference_audio'):
+            # For cloning, use a derived name from reference audio or default
+            ref_audio = getattr(voice_cfg, 'reference_audio', None)
+            if ref_audio:
+                voice = Path(ref_audio).stem  # Use filename without extension
+            else:
+                voice = "cloned_voice"
+        else:
+            voice = "default_voice"
+
+        # Ensure provider exists; if not, create it from ProviderConfig
+        if provider_name not in self.providers:
+            try:
+                # Build a minimal config dict for provider creation
+                cfg: Dict[str, Any] = {
+                    'provider_config': provider_config.model_dump()
+                }
+                # Optionally carry model and sample_rate from GenerateSpeechConfig
+                if model:
+                    cfg['model'] = model
+                audio_cfg = getattr(generation_config, 'audio_config', None)
+                if audio_cfg and getattr(audio_cfg, 'sample_rate', None):
+                    cfg['sample_rate'] = audio_cfg.sample_rate
+
+                provider_instance = self.provider_factory.create_provider(provider_name, cfg)
+                self.providers[provider_name] = provider_instance
+                self.logger.debug(f"Auto-created provider '{provider_name}' from ProviderConfig")
+            except Exception as e:
+                raise ValueError(f"Failed to auto-create provider '{provider_name}': {e}")
+
+        # Extract reference_audio from VoiceCloningConfig if not explicitly provided
+        if reference_audio is None and tts_type == "clone":
+            if hasattr(voice_cfg, 'reference_audio'):
+                reference_audio = Path(voice_cfg.reference_audio)
+
+        return self._generate_from_configs_batch(
+            text_items=text_items,
+            provider_name=provider_name,
+            model=model,
+            voice=voice,
+            batch_size=batch_size,
+            delay_between_requests=delay_between_requests,
+            continue_on_error=continue_on_error,
+            tts_type=tts_type,
+            reference_audio=reference_audio,
+            generation_config=generation_config,
+            enable_concurrency=enable_concurrency,
+            max_workers=max_workers,
+        )
+
+    def _generate_from_configs_batch(
+        self,
+        text_items: List[Tuple[str, str]],
+        provider_name: str,
+        model: str,
+        voice: str,
+        batch_size: int = 10,
+        delay_between_requests: float = 3,
+        continue_on_error: bool = True,
+        tts_type: str = "synthesize",
+        reference_audio: Optional[Path] = None,
+        generation_config: Optional[GenerateSpeechConfig] = None,
+        enable_concurrency: bool = False,
+        max_workers: int = 4,
+    ) -> BatchGenerationSummary:
+        """
+        Internal batch generator that uses ProviderConfig + GenerateSpeechConfig directly
+        without routing through generate_from_text_list.
+        """
+        if not text_items:
+            return BatchGenerationSummary(
+                total_texts=0,
+                successful_generations=0,
+                failed_generations=0,
+                total_duration=0.0,
+                errors=[],
+                results=[]
+            )
+
+        tts_type = (tts_type or "synthesize").lower()
+        if tts_type not in ("synthesize", "clone"):
+            raise ValueError(f"Invalid tts_type: {tts_type}.")
+        if tts_type == "clone":
+            if reference_audio is None:
+                raise ValueError("reference_audio is required for clone operations")
+            if isinstance(reference_audio, (str, bytes)):
+                reference_audio = Path(reference_audio)
+            if not reference_audio.exists():
+                raise FileNotFoundError(f"Reference audio file not found: {reference_audio}")
+
+        self._log_generation_start(provider_name, model, voice, tts_type, text_items)
+
+        all_results: List[Union[SynthesisResult, CloneResult]] = []
+        errors: List[str] = []
+        total_start_time = time.time()
+
+        # Sử dụng _process_batch cho logic xử lý batch, concurrency
+        def batch_fn(text_id, text):
+            if tts_type == "synthesize":
+                return self._generate_single_text(
+                    text_id=text_id,
+                    text=text,
+                    provider_name=provider_name,
+                    model=model,
+                    voice=voice,
+                    tts_type="synthesize",
+                    generation_config=generation_config,
+                )
+            else:
+                return self.clone_single_text(
+                    text_id=text_id,
+                    text=text,
+                    provider_name=provider_name,
+                    reference_audio=reference_audio,
+                    voice=voice,
+                    model=model,
+                )
+        all_results, errors = self._process_batch(
+            text_items,
+            batch_fn,
+            batch_size=batch_size,
+            delay_between_requests=delay_between_requests,
+            continue_on_error=continue_on_error,
+            rich_desc=f"{tts_type.title()} with {provider_name}",
+            enable_concurrency=enable_concurrency,
+            max_workers=max_workers,
+        )
+        summary = self._build_batch_summary(text_items, all_results, errors, total_start_time)
+        self._log_summary(summary)
+        return summary
+
+    def _log_generation_start(self, provider_name: str, model: str, voice: str, tts_type: str, text_items: list):
+        self.logger.debug(f"Starting {tts_type} generation: provider={provider_name}, model={model}, voice={voice}, items={len(text_items)}")
+        if self.use_rich and self.console:
+            self._print_generation_panel(provider_name, model, voice, tts_type, text_items)
+
+    def _print_generation_panel(self, provider_name: str, model: str, voice: str, tts_type: str, text_items: list):
+        panel_title = "Synthetic Audio Generation" if tts_type == "synthesize" else "Voice Cloning"
+        start_panel = Panel(
+            f"[cyan]Provider:[/cyan] {provider_name}\n"
+            f"[cyan]Model:[/cyan] {model}\n"
+            f"[cyan]Voice:[/cyan] {voice}\n"
+            f"[cyan]Type:[/cyan] {tts_type}\n"
+            f"[cyan]Items:[/cyan] {len(text_items)}",
+            title=f"🚀 {panel_title}",
+            border_style="green",
+            expand=False
+        )
+        self.console.print(start_panel)
+
+    def _build_batch_summary(self, text_items, all_results, errors, total_start_time):
+        total_duration = time.time() - total_start_time
+        successful = len([r for r in all_results if r.success])
+        failed = len(errors)
+        return BatchGenerationSummary(
+            total_texts=len(text_items),
+            successful_generations=successful,
+            failed_generations=failed,
+            total_duration=total_duration,
+            errors=errors,
+            results=all_results,
+        )
+
+
     def synthesize_single_text(self, text_id: str, text: str, provider_name: str,
-                             model: str, voice: str) -> SynthesisResult:
+                             model: str, voice: str,
+                             generation_config: Optional[GenerateSpeechConfig] = None
+                             ) -> SynthesisResult:
         """Synthesize audio for a single text using a specific provider
         
         Args:
@@ -411,10 +643,28 @@ class DatasetGenerator:
                 provider_name, model, voice
             )
 
+            # Determine desired container/extension from GenerateSpeechConfig.audio_config.container
+            desired_ext = ".wav"
+            try:
+                container_val = None
+                if generation_config and getattr(generation_config, 'audio_config', None):
+                    container_val = getattr(generation_config.audio_config, 'container', None)
+                if isinstance(container_val, str):
+                    ext_map = {
+                        'wav': '.wav',
+                        'mp3': '.mp3',
+                        # 'raw': '.raw',
+                    }
+                    desired_ext = ext_map.get(container_val.lower(), '.wav')
+            except Exception:
+                # Fallback to default .wav if anything unexpected happens
+                desired_ext = ".wav"
+
             # Create file name using text_id from input
             safe_text = self._sanitize_filename(text[:50])
-            audio_filename = f"{text_id}_{safe_text}.wav"
+            audio_filename = f"{text_id}_{safe_text}{desired_ext}"
             audio_path = wav_dir / audio_filename
+            self.logger.debug(f"Planned output audio path: {audio_path}")
 
             # Check if file already exists - skip generation if it does
             if audio_path.exists():
@@ -432,10 +682,54 @@ class DatasetGenerator:
                     skipped_duplicate=True
                 )
 
-            # Generate the audio using clean voice name
-            synth_result = provider.synthesize_with_metadata(text, clean_voice, audio_path)
+            # Prepare an effective GenerateSpeechConfig ensuring voice/model/sample_rate are set
+            eff_gen_cfg = generation_config
+            try:
+                if eff_gen_cfg is None:
+                    eff_gen_cfg = GenerateSpeechConfig(
+                        model=model,
+                        voice_config=VoiceConfig(voice_id=clean_voice),
+                        audio_config=AudioConfig(channel=1, sample_rate=provider.sample_rate or 24000)
+                    )
+                else:
+                    # Ensure model
+                    if not getattr(eff_gen_cfg, 'model', None):
+                        eff_gen_cfg.model = model
+                    # Ensure voice
+                    if getattr(eff_gen_cfg, 'voice_config', None) is None or not getattr(eff_gen_cfg.voice_config, 'voice_id', None):
+                        eff_gen_cfg.voice_config = VoiceConfig(voice_id=clean_voice)
+                    # Ensure sample_rate if missing
+                    if getattr(eff_gen_cfg, 'audio_config', None) is None:
+                        eff_gen_cfg.audio_config = AudioConfig(channel=1, sample_rate=provider.sample_rate or 24000)
+                    elif getattr(eff_gen_cfg.audio_config, 'sample_rate', None) is None and provider.sample_rate:
+                        eff_gen_cfg.audio_config.sample_rate = provider.sample_rate
+            except Exception:
+                # Fallback minimal config if anything goes wrong
+                eff_gen_cfg = GenerateSpeechConfig(
+                    model=model,
+                    voice_config=VoiceConfig(voice_id=clean_voice),
+                    audio_config=AudioConfig(channel=1, sample_rate=provider.sample_rate or 24000)
+                )
+
+            # Call provider synthesize_with_metadata with unified signature
+            synth_result = provider.synthesize_with_metadata(text, audio_path, generation_config=eff_gen_cfg)
 
             if synth_result['success']:
+                # Determine effective duration
+                duration_val = None
+                try:
+                    if isinstance(synth_result, dict):
+                        if synth_result.get('duration'):
+                            duration_val = float(synth_result['duration'])
+                        elif synth_result.get('estimated_duration'):
+                            duration_val = float(synth_result['estimated_duration'])
+                except Exception:
+                    duration_val = None
+
+                # If provider didn't return duration, calculate from the written file
+                if duration_val is None or duration_val == 0:
+                    duration_val = self.directory_manager._calculate_duration(audio_path)
+
                 # Add metadata entry using the new method
                 self.directory_manager.add_metadata_entry(
                     voice_dir=voice_dir,
@@ -446,7 +740,7 @@ class DatasetGenerator:
                     voice=voice,
                     tts_type="synthesize",
                     sample_rate=provider.sample_rate,
-                    duration=synth_result.get('estimated_duration', 0),
+                    duration=duration_val,
                     text_id=text_id,
                     lang="vi"
                 )
@@ -458,7 +752,7 @@ class DatasetGenerator:
                     model=model,
                     audio_path=audio_path,
                     metadata_path=voice_dir,  # Point to the directory
-                    duration=synth_result.get('estimated_duration', 0),
+                    duration=duration_val,
                     file_size=audio_path.stat().st_size if audio_path.exists() else 0,
                     voice=voice
                 )
@@ -495,7 +789,8 @@ class DatasetGenerator:
         provider_name: str,
         reference_audio: str, 
         voice: str, 
-        model: str = None) -> CloneResult:
+        model: str = None
+    ) -> CloneResult:
         """Clone voice for a single text using a specific provider
         
         Args:
@@ -554,10 +849,45 @@ class DatasetGenerator:
                     skipped_duplicate=True,
                 )
 
-            # Generate the audio using clone with reference_audio
-            synth_result = provider.clone_with_metadata(text, reference_audio, audio_path)
+            # Generate the audio using clone with VoiceCloningConfig compatible with Xiaomi provider
+            try:
+                vc_cfg = VoiceCloningConfig(
+                    model=model or "OmniVoice",
+                    voice_config=ReplicatedVoiceConfig(
+                        reference_audio=str(reference_audio),
+                        reference_text=None,
+                        language="vi",
+                    ),
+                )
+            except Exception:
+                # Fallback minimal config in case dataclasses are unavailable
+                vc_cfg = None
+
+            if vc_cfg is not None:
+                synth_result = provider.clone_with_metadata(
+                    text,
+                    audio_path,
+                    voice_cloning_config=vc_cfg,
+                )
+            else:
+                synth_result = provider.clone(text, audio_path)
 
             if synth_result['success']:
+                # Determine effective duration
+                duration_val = None
+                try:
+                    if isinstance(synth_result, dict):
+                        if synth_result.get('duration'):
+                            duration_val = float(synth_result['duration'])
+                        elif synth_result.get('estimated_duration'):
+                            duration_val = float(synth_result['estimated_duration'])
+                except Exception:
+                    duration_val = None
+
+                # If provider didn't return duration, calculate from the written file
+                if duration_val is None or duration_val == 0:
+                    duration_val = self.directory_manager._calculate_duration(audio_path)
+
                 # Add metadata entry using the new method
                 self.directory_manager.add_metadata_entry_clone(
                     voice_dir=voice_dir,
@@ -568,7 +898,7 @@ class DatasetGenerator:
                     voice=voice,
                     tts_type="clone",
                     sample_rate=provider.sample_rate,
-                    duration=synth_result.get('estimated_duration', 0),
+                    duration=duration_val,
                     text_id=text_id,
                     lang="vi"
                 )
@@ -580,7 +910,7 @@ class DatasetGenerator:
                     model=model,
                     audio_path=audio_path,
                     metadata_path=voice_dir, # Point to the directory
-                    duration=synth_result.get('estimated_duration', 0),
+                    duration=duration_val,
                     file_size=audio_path.stat().st_size if audio_path.exists() else 0,
                     reference_audio=reference_audio,
                 )
@@ -611,7 +941,8 @@ class DatasetGenerator:
             )
 
     def _generate_single_text(self, text_id: str, text: str, provider_name: str,
-                            model: str, voice: str, tts_type: str = "synthesize") -> Union[SynthesisResult, CloneResult]:
+                            model: str, voice: str, tts_type: str = "synthesize",
+                            generation_config: Optional[GenerateSpeechConfig] = None) -> Union[SynthesisResult, CloneResult]:
         """Legacy method - use synthesize_single_text or clone_single_text directly
         
         Args:
@@ -627,7 +958,7 @@ class DatasetGenerator:
         """
         if tts_type == "clone":
             return self.clone_single_text(text_id, text, provider_name, model, voice)
-        return self.synthesize_single_text(text_id, text, provider_name, model, voice)
+        return self.synthesize_single_text(text_id, text, provider_name, model, voice, generation_config=generation_config)
 
     def _sanitize_filename(self, text: str) -> str:
         """Sanitize text to create a valid file name"""
@@ -660,23 +991,61 @@ class DatasetGenerator:
             self.logger.error(f"❌ Failed to save text items to {output_path}: {e}")
 
     def _log_summary(self, summary: BatchGenerationSummary, skipped_duplicates: int = 0):
-        """Log summary of generation results"""
-        self.logger.info("📊 Generation Summary:")
-        self.logger.info(f"   Total texts: {summary.total_texts}")
-        self.logger.info(f"   ✅ Successful generations: {summary.successful_generations}")
-        self.logger.info(f"   ⏭️ Skipped duplicates: {skipped_duplicates}")
-        self.logger.info(f"   ❌ Failed generations: {summary.failed_generations}")
-        self.logger.info(f"   ⏱️ Total duration: {summary.total_duration:.2f}s")
-        self.logger.info(f"   📁 Output dir: {self.output_dir}")
+        """Log summary of generation results using Rich"""
+        # Compute extras
+        # Duration: sum of all audio durations
+        total_audio_duration = 0.0
+        try:
+            total_audio_duration = sum(float(getattr(r, 'duration', 0) or 0) for r in (summary.results or []))
+        except Exception:
+            total_audio_duration = 0.0
+        items_sec = (summary.total_texts / total_audio_duration) if total_audio_duration > 0 else 0.0
+        total_size = 0
+        try:
+            total_size = sum(int(getattr(r, 'file_size', 0) or 0) for r in (summary.results or []))
+        except Exception:
+            total_size = 0
 
-        if summary.errors:
-            self.logger.warning(f"⚠️ {len(summary.errors)} errors during generation")
+        # Create summary table
+        table = Table(title="Generation Summary", show_header=True, header_style="bold", box=box.SQUARE, expand=True)
+        table.add_column("Metric", style="white", width=22)
+        table.add_column("Value", style="white", overflow="fold")
+        
+        table.add_row("Total Items", str(summary.total_texts))
+        table.add_row("Success", f"{summary.successful_generations}")
+        if skipped_duplicates > 0:
+            table.add_row("Skipped", f"{skipped_duplicates}")
+        if summary.failed_generations > 0:
+            table.add_row("Failed", f"{summary.failed_generations}")
+        table.add_row("Total Audio Duration", f"{total_audio_duration:.2f}s")
+        if total_size > 0:
+            table.add_row("Total Audio Size", f"{total_size/1024.0:.1f} KB")
+        
+        # Show full voice name if available
+        if hasattr(self, 'voice_name') and self.voice_name:
+            table.add_row("Voice Name", str(self.voice_name))
+        table.add_row("Output Directory", str(self.output_dir))
 
-        # Log a few errors if any
-        if summary.errors:
-            self.logger.info("🔍 A few errors detected:")
-            for error in summary.errors[:3]:
-                self.logger.info(f"   ❌ {error}")
+
+        
+
+        if self.use_rich and self.console:
+            self.console.print(table)
+        else:
+            # Fallback plain logging
+            self.logger.info("📊 Generation Summary")
+            for row in table.rows:
+                self.logger.info(" | ".join(cell.plain for cell in row.cells))
+
+        # Show errors if any
+        if summary.errors and self.use_rich and self.console:
+            error_table = Table(title=f"⚠️ {len(summary.errors)} Error(s) Detected", show_header=True, header_style="bold red", box=box.SQUARE)
+            error_table.add_column("#", style="red", width=4)
+            error_table.add_column("Error", style="white")
+            for i, error in enumerate(summary.errors[:10]):
+                error_table.add_row(str(i+1), error)
+            self.console.print(error_table)
+
 
     def get_generation_stats(self) -> Dict[str, Any]:
         """Get overall statistics of the generation process"""
@@ -690,7 +1059,7 @@ class DatasetGenerator:
         else:
             return self.directory_manager.get_structure_summary()
 
-    def cleanup_providers(self):
+    def cleanup_providers(self) -> None:
         """Cleanup all providers"""
         self.provider_factory.cleanup_all_providers()
         self.providers.clear()

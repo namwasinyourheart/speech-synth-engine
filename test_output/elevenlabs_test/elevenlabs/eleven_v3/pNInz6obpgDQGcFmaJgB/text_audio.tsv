@@ -1,4 +1,0 @@
-utt_id	text_id	text	audio_path	duration	gen_date
-00001	test_1	Xin chào, đây là test với ElevenLabs TTS provider	wav/test_1_Xin_chào,_đây_là_test_với_ElevenLabs_TTS_provider.wav	4.08	2025-12-28 09:32:42
-00002	0108245608	số sáu mươi sáu, đường quảng oai, thị trấn tây đằng, huyện ba vì, thành phố hà nội	wav/0108245608_số_sáu_mươi_sáu,_đường_quảng_oai,_thị_trấn_tây_đằn.wav	6.83	2025-12-28 09:36:01
-00003	0108235818	số ba trăm chín mươi tám đường quảng oai, thị trấn tây đằng, huyện ba vì, thành phố hà nội	wav/0108235818_số_ba_trăm_chín_mươi_tám_đường_quảng_oai,_thị_trấn.wav	7.50	2025-12-28 09:36:06

@@ -1,8 +1,0 @@
-{
-    "provider": "gemini",
-    "model": "default",
-    "voice": "Fenrir",
-    "tts_type": "synthesize",
-    "sampling_rate": 24000,
-    "lang": "vi"
-}

@@ -5,3 +5,10 @@ __pycache__
 speech-synth-engine/notebooks/test_output
 
 *copy.py
+
+try/output
+try/try_output
+
+tests/test_output
+
+gateway_output

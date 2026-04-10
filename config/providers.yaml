@@ -56,22 +56,6 @@ providers:
     min_duration: 0.5
     max_duration: 15.0
 
-  # Azure TTS Provider (ví dụ mở rộng)
-  azure:
-    class: "speech_synth_engine.providers.azure_provider.AzureTTSProvider"
-    api_key: "${AZURE_API_KEY}"
-    region: "southeastasia"
-    sample_rate: 16000
-    models:
-      neural:
-        voices:
-          - "vi-VN-HoaiMyNeural"
-          - "vi-VN-NamMinhNeural"
-    language: "vi"
-    chars_per_second: 13
-    min_duration: 0.5
-    max_duration: 10.0
-
 # Cấu hình mặc định cho generation
 generation_defaults:
   batch_size: 10

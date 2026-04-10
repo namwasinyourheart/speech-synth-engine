@@ -24,11 +24,6 @@ class ElevenLabsProvider(TTSProvider):
         # Now set up our logger
         import logging
         self.logger = logging.getLogger(f"TTSProvider.{self.name}")
-        if not self.logger.handlers:  # Avoid adding multiple handlers
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
         
         # Update config with provided values
         self.config = config or {}
@@ -44,7 +39,10 @@ class ElevenLabsProvider(TTSProvider):
         )
         
         # Log the model being used
-        self.logger.info(f"Using model: {self.model_id}")
+        self.logger.debug(f"Using model: {self.model_id}")
+        
+        # Track last error for detailed error reporting
+        self.last_error: Optional[str] = None
         
         # Initialize API key manager
         try:
@@ -67,8 +65,8 @@ class ElevenLabsProvider(TTSProvider):
             # Initialize ElevenLabs client with the first key
             from elevenlabs.client import ElevenLabs
             self.client = ElevenLabs(api_key=self.key_manager.get_current_key())
-            self.logger.info("Successfully initialized ElevenLabs client")
-            self.logger.info(f"Using API key ending with ...{self.key_manager.get_current_key()[-4:]}")
+            self.logger.debug("Successfully initialized ElevenLabs client")
+            self.logger.debug(f"Using API key ending with ...{self.key_manager.get_current_key()[-4:]}")
             
             # Now that client is initialized, update supported_voices
             self.supported_voices = self._get_supported_voices()
@@ -117,7 +115,7 @@ class ElevenLabsProvider(TTSProvider):
             if hasattr(response, 'voices') and isinstance(response.voices, list):
                 self._available_voices = [voice.voice_id for voice in response.voices]
                 if hasattr(self, 'logger'):
-                    self.logger.info(f"Successfully fetched {len(self._available_voices)} voices from API")
+                    self.logger.debug(f"Successfully fetched {len(self._available_voices)} voices from API")
                 return self._available_voices
             else:
                 if hasattr(self, 'logger'):
@@ -151,7 +149,7 @@ class ElevenLabsProvider(TTSProvider):
         while retry_count <= max_retries:
             try:
                 # Make the API call with the current key
-                self.logger.info(f"🔧 Using model_id: {self.model_id}, voice_id: {voice_id}, "
+                self.logger.debug(f"Using model_id: {self.model_id}, voice_id: {voice_id}, "
                                f"API key: ...{self.key_manager.get_current_key()[-4:]}")
                 
                 response = self.client.text_to_speech.convert(
@@ -190,7 +188,7 @@ class ElevenLabsProvider(TTSProvider):
                         
                     # Update the client with the new key
                     self.client = ElevenLabs(api_key=new_key)
-                    self.logger.info(f"Rotated to new API key ending with ...{new_key[-4:]}")
+                    self.logger.debug(f"Rotated to new API key ending with ...{new_key[-4:]}")
                     retry_count += 1
                 else:
                     # For other errors, don't retry with a different key
@@ -211,10 +209,14 @@ class ElevenLabsProvider(TTSProvider):
         Returns:
             bool: True if synthesis was successful, False otherwise
         """
+        # Clear any previous error
+        self.last_error = None
+        
         try:
             # Validate text
             if not self.validate_text(text):
-                self.logger.error(f"Invalid text: {text[:50]}...")
+                self.last_error = f"Invalid text: {text[:50]}..."
+                self.logger.error(self.last_error)
                 return False
             
             # Use provided voice or default
@@ -224,23 +226,24 @@ class ElevenLabsProvider(TTSProvider):
             if output_file is None:
                 output_file = Path("output_elevenlabs.wav")
             
-            self.logger.info(f"🔄 Calling ElevenLabs TTS API for text: {text[:50]}...")
+            self.logger.debug(f"Calling ElevenLabs TTS API for text: {text[:50]}...")
             
             # Make the API call with retry logic
             success = self._make_api_call(text, voice_id, output_file)
             
             if success:
-                duration = self.estimate_duration(text)
                 file_size = output_file.stat().st_size
-                self.logger.info(f"✅ ElevenLabs synthesis successful: {output_file} "
-                               f"({file_size/1024:.1f}KB, {duration:.2f}s)")
+                self.logger.debug(f"ElevenLabs synthesis successful: {output_file} "
+                               f"({file_size/1024:.1f}KB)")
                 return True
             else:
-                self.logger.error(f"❌ ElevenLabs synthesis failed after retries")
+                self.last_error = f"ElevenLabs synthesis failed after retries"
+                self.logger.error(f"❌ {self.last_error}")
                 return False
                 
         except Exception as e:
-            self.logger.error(f"❌ ElevenLabs synthesis error: {e}")
+            self.last_error = f"ElevenLabs synthesis error: {e}"
+            self.logger.error(f"❌ {self.last_error}")
             return False
 
     def synthesize_with_metadata(self, text: str, voice: str = None, output_file: Path = None) -> Dict[str, Any]:
@@ -260,17 +263,24 @@ class ElevenLabsProvider(TTSProvider):
             
         success = self.synthesize(text, voice, output_file)
         
-        return {
-            'success': success,
-            'text': text,
-            'voice': voice or self.default_voice_id,
-            'output_file': str(output_file.absolute()),
-            'provider': self.name,
-            'model': self.model_id,
-            'estimated_duration': self.estimate_duration(text),
-            'error': None if success else "Synthesis failed",
-            'file_info': self.get_file_info(output_file) if success else {}
-        }
+        from speech_synth_engine.schemas.schemas import SynthesisResult
+        if success:
+            return SynthesisResult(
+                success=True,
+                text=text,
+                output_file=str(output_file.absolute()),
+                provider=self.name,
+                model=self.model_id
+            )
+        else:
+            return SynthesisResult(
+                success=False,
+                text=text,
+                output_file=None,
+                provider=self.name,
+                model=self.model_id,
+                error={'message': 'Synthesis failed'}
+            )
 
     def clone(self, text: str, reference_audio: Path, output_file: Path) -> bool:
         """

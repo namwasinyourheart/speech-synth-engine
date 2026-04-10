@@ -20,6 +20,8 @@ class DirectoryManager:
     def __init__(self, base_output_dir: Path):
         self.base_dir = Path(base_output_dir)
         self.logger = logging.getLogger("DirectoryManager")
+        self.logger.setLevel(logging.DEBUG)
+        self.logger.propagate = False
 
         # Define directory structure
         self.structure_template = {
@@ -55,11 +57,7 @@ class DirectoryManager:
             # Create necessary directories
             wav_dir.mkdir(parents=True, exist_ok=True)
 
-            self.logger.info(f"✅ Directory structure created:")
-            self.logger.info(f"   Provider: {provider}")
-            self.logger.info(f"   Model: {model}")
-            self.logger.info(f"   Voice: {voice}")
-            self.logger.info(f"   WAV dir: {wav_dir}")
+            self.logger.debug(f"Directory structure created: provider={provider}, model={model}, voice={voice}, wav_dir={wav_dir}")
 
             return voice_dir, wav_dir
 
@@ -89,11 +87,7 @@ class DirectoryManager:
             # Create necessary directories
             wav_dir.mkdir(parents=True, exist_ok=True)
 
-            self.logger.info(f"✅ Clone directory structure created:")
-            self.logger.info(f"   Provider: {provider}")
-            self.logger.info(f"   Model: {model}")
-            self.logger.info(f"   Voice: {voice}")
-            self.logger.info(f"   WAV dir: {wav_dir}")
+            self.logger.debug(f"Clone directory structure created: provider={provider}, model={model}, voice={voice}, wav_dir={wav_dir}")
 
             return voice_dir, wav_dir
 
@@ -154,7 +148,7 @@ class DirectoryManager:
                 }
                 with open(metadata_json_path, 'w', encoding='utf-8') as f:
                     json.dump(common_metadata, f, indent=4, ensure_ascii=False)
-                self.logger.info(f"✅ Created metadata.json at {metadata_json_path}")
+                self.logger.debug(f"Created metadata.json at {metadata_json_path}")
 
             # --- Handle text_audio.tsv (specific data) ---
             # Initialize TSV with header if it doesn't exist
@@ -169,9 +163,11 @@ class DirectoryManager:
 
             utt_id = f"{current_count + 1:05d}" # Pad to 5 digits for more files
 
-            # Estimate duration if not provided
+            # Calculate actual audio duration if not provided
             if duration is None:
-                duration = self._estimate_duration(text)
+                duration = self._calculate_duration(audio_path)
+
+            self.logger.debug(f"Calculated duration for {audio_path.name}: {duration:.2f} seconds")
 
             # Prepare data for TSV
             entry = [
@@ -195,9 +191,18 @@ class DirectoryManager:
             self.logger.error(f"❌ Error adding clone metadata: {e}")
             return False
 
-    def add_metadata_entry(self, voice_dir: Path, text: str, audio_path: Path,
-                          provider: str, model: str, voice: str, tts_type: str,
-                          sample_rate: int = 22050, duration: float = None, text_id: str = None, lang: str = "vi") -> bool:
+    def add_metadata_entry(self, 
+    voice_dir: Path, 
+    text: str, 
+    audio_path: Path,
+    provider: str, 
+    model: str, 
+    voice: str, 
+    tts_type: str,
+    sample_rate: int = 22050, 
+    duration: float = None, 
+    text_id: str = None, 
+    lang: str = "vi") -> bool:
         """
         Add a metadata entry for synthesis operations, splitting data into
         metadata.json (for common info) and text_audio.tsv (for audio-specific info).
@@ -235,7 +240,7 @@ class DirectoryManager:
                 }
                 with open(metadata_json_path, 'w', encoding='utf-8') as f:
                     json.dump(common_metadata, f, indent=4, ensure_ascii=False)
-                self.logger.info(f"✅ Created metadata.json at {metadata_json_path}")
+                self.logger.debug(f"Created metadata.json at {metadata_json_path}")
 
             # --- Handle text_audio.tsv (specific data) ---
             # Initialize TSV with header if it doesn't exist
@@ -250,9 +255,9 @@ class DirectoryManager:
 
             utt_id = f"{current_count + 1:05d}"  # Pad to 5 digits for more files
 
-            # Estimate duration if not provided
+            # Calculate actual audio duration if not provided
             if duration is None:
-                duration = self._estimate_duration(text)
+                duration = self._calculate_duration(audio_path)
 
             # Prepare data for TSV
             entry = [
@@ -276,14 +281,44 @@ class DirectoryManager:
             self.logger.error(f"❌ Error adding metadata: {e}")
             return False
 
-    def _estimate_duration(self, text: str) -> float:
-        """Estimate audio duration based on text length"""
-        # Adjust parameters based on real-world experience for Vietnamese
-        chars_per_second = 12  # characters per second
-        estimated_seconds = len(text) / chars_per_second
+    def _calculate_duration(self, audio_path: Path) -> float:
+        """
+        Calculate audio duration using soundfile.
 
-        # Apply reasonable limits
-        return max(0.5, min(10.0, estimated_seconds))
+        Args:
+            audio_path: Path to the audio file (e.g., .wav)
+
+        Returns:
+            Duration in seconds as float. Returns 0.0 if duration can't be determined.
+        """
+        # First attempt: soundfile
+        try:
+            import soundfile as sf  # lazy import to avoid hard dep at module import time
+            with sf.SoundFile(str(audio_path)) as f:
+                frames = len(f)
+                sr = int(getattr(f, 'samplerate', 0))
+                duration = round(frames / sr, 3) if sr > 0 else 0.0
+                self.logger.debug(f"Duration probe (soundfile): frames={frames}, sr={sr}, duration={duration}")
+                if duration > 0:
+                    return duration
+        except Exception as e:
+            self.logger.debug(f"soundfile probe failed for {audio_path}: {e}")
+
+        # Fallback for WAV using wave module
+        try:
+            if str(audio_path).lower().endswith('.wav'):
+                import wave
+                with wave.open(str(audio_path), 'rb') as wf:
+                    frames = wf.getnframes()
+                    sr = wf.getframerate()
+                    duration = round(frames / float(sr), 3) if sr > 0 else 0.0
+                    self.logger.debug(f"Duration probe (wave): frames={frames}, sr={sr}, duration={duration}")
+                    return max(0.0, duration)
+        except Exception as e:
+            self.logger.debug(f"wave probe failed for {audio_path}: {e}")
+
+        self.logger.warning(f"⚠️  Could not determine duration for {audio_path} with available probes")
+        return 0.0
 
     def get_next_utt_id(self, metadata_file: Path) -> str:
         """Get next utt_id for metadata file"""

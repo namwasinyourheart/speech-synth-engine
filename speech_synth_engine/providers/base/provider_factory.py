@@ -11,10 +11,11 @@ from typing import Dict, List, Optional, Type, Any
 from pathlib import Path
 import logging
 import yaml
+from ...schemas.provider import ProviderConfig
 
 # Add current directory to path để import được các providers
 current_dir = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(current_dir))
+# sys.path.insert(0, str(current_dir))
 
 from .provider import TTSProvider, ProviderCapabilities
 
@@ -40,16 +41,20 @@ class ProviderFactory:
             from ..vnpost_provider import VnPostTTSProvider
             from ..minimax_selenium_provider import MiniMaxSeleniumProvider
             from ..elevenlabs_provider import ElevenLabsProvider
+            from ..cartesia_provider import CartesiaTTSProvider
+            from ..xiaomi_provider import XiaomiTTSProvider
 
             self._provider_classes.update({
                 'gtts': GTTSProvider,        
                 'gemini': GeminiTTSProvider, 
                 'vnpost': VnPostTTSProvider,
                 'minimax_selenium': MiniMaxSeleniumProvider,
-                'elevenlabs': ElevenLabsProvider
+                'elevenlabs': ElevenLabsProvider,
+                'cartesia': CartesiaTTSProvider,
+                'xiaomi': XiaomiTTSProvider,
             })
 
-            self.logger.info(f"✅ Registered {len(self._provider_classes)} built-in providers")
+            self.logger.debug(f"Registered {len(self._provider_classes)} built-in providers")
 
         except ImportError as e:
             self.logger.warning(f"⚠️ Cannot import some providers: {e}")
@@ -65,7 +70,7 @@ class ProviderFactory:
         Create provider instance from name and config.
 
         Args:
-            provider_name: Provider name ('gtts', 'azure', 'gemini', etc.)
+            provider_name: Provider name ('gtts', 'gemini', 'cartesia', etc.)
             config: Configuration for the provider
 
         Returns:
@@ -76,6 +81,23 @@ class ProviderFactory:
         """
         config = config or {}
 
+        # Validate optional provider_config:
+        # - If it's already a ProviderConfig instance, keep as-is
+        # - If it's a dict, validate and normalize
+        # Keep a reference to ProviderConfig instance if one was provided
+        pcfg_obj = config.get('provider_config') if isinstance(config, dict) else None
+        try:
+            if isinstance(pcfg_obj, ProviderConfig):
+                # already validated
+                pass
+            elif isinstance(pcfg_obj, dict):
+                validated = ProviderConfig.model_validate(pcfg_obj)
+                # Keep dict form for serialization friendliness
+                config['provider_config'] = validated.model_dump()
+                pcfg_obj = validated  # store instance for potential fallback
+        except Exception as e:
+            self.logger.warning(f"provider_config validation failed for '{provider_name}': {e}")
+
         # Find provider class
         provider_class = self._provider_classes.get(provider_name.lower())
         if not provider_class:
@@ -83,20 +105,23 @@ class ProviderFactory:
                            f"Available providers: {list(self._provider_classes.keys())}")
 
         try:
-            # Create instance with config
+            # Prefer legacy signature (name, config=...)
             provider = provider_class(name=provider_name, config=config)
-
-            # Validate provider
-            if not isinstance(provider, TTSProvider):
-                raise ValueError(f"Provider {provider_name} is not a TTSProvider")
-
-            self._loaded_providers[provider_name] = provider
-            self.logger.info(f"✅ Created provider: {provider_name}")
-
-            return provider
-
+        except TypeError:
+            # Fallback to (name, provider_config=...)
+            try:
+                provider = provider_class(name=provider_name, provider_config=pcfg_obj if isinstance(pcfg_obj, ProviderConfig) else None)
+            except Exception as e:
+                raise ValueError(f"Error creating provider {provider_name} with provider_config: {e}")
         except Exception as e:
             raise ValueError(f"Error creating provider {provider_name}: {e}")
+
+        # Validate provider type
+        if not isinstance(provider, TTSProvider):
+            raise ValueError(f"Provider {provider_name} is not a TTSProvider")
+
+        self.logger.debug(f"Created provider: {provider_name}")
+        return provider
 
     def create_providers_from_config(self, config_file: Path) -> Dict[str, TTSProvider]:
         """
